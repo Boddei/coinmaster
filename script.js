@@ -1,0 +1,447 @@
+// Bitcoin Dashboard - Main JavaScript
+
+// Configuration
+const CONFIG = {
+    coingecko: {
+        baseUrl: 'https://api.coingecko.com/api/v3',
+        coin: 'bitcoin'
+    },
+    refreshInterval: 60000, // 1 minute
+    chartDays: 7
+};
+
+// Global state
+let btcChart = null;
+let currentChartDays = 7;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+});
+
+async function initApp() {
+    console.log('Bitcoin Dashboard initialisiert...');
+    
+    // Load initial data
+    await loadBitcoinData();
+    await loadChartData(currentChartDays);
+    await loadFundamentalIndicators();
+    
+    // Setup chart controls
+    setupChartControls();
+    
+    // Setup auto-refresh
+    setInterval(async () => {
+        await loadBitcoinData();
+        await loadFundamentalIndicators();
+    }, CONFIG.refreshInterval);
+    
+    // Update last update time
+    updateLastUpdateTime();
+    setInterval(updateLastUpdateTime, 30000);
+}
+
+// ============================================================================
+// Bitcoin Price Data
+// ============================================================================
+
+async function loadBitcoinData() {
+    try {
+        const response = await fetch(
+            `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}?` +
+            'localization=false&tickers=false&community_data=false&developer_data=false'
+        );
+        
+        if (!response.ok) throw new Error('API Fehler');
+        
+        const data = await response.json();
+        updatePriceDisplay(data);
+        updateStats(data);
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Bitcoin-Daten:', error);
+        showError('Preisdaten konnten nicht geladen werden');
+    }
+}
+
+function updatePriceDisplay(data) {
+    const price = data.market_data;
+    
+    // EUR price
+    const eurPrice = price.current_price.eur;
+    document.getElementById('btcPrice').textContent = 
+        formatCurrency(eurPrice, 'EUR');
+    
+    // USD price
+    const usdPrice = price.current_price.usd;
+    document.getElementById('btcPriceUSD').textContent = 
+        formatCurrency(usdPrice, 'USD');
+    
+    // CHF price
+    const chfPrice = price.current_price.chf;
+    document.getElementById('btcPriceCHF').textContent = 
+        formatCurrency(chfPrice, 'CHF');
+    
+    // 24h change
+    const change24h = price.price_change_percentage_24h;
+    const changeElement = document.getElementById('priceChange');
+    changeElement.textContent = `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`;
+    changeElement.className = `price-change ${change24h >= 0 ? 'positive' : 'negative'}`;
+}
+
+function updateStats(data) {
+    const price = data.market_data;
+    
+    // 24h high/low
+    document.getElementById('high24h').textContent = 
+        formatCurrency(price.high_24h.eur, 'EUR');
+    document.getElementById('low24h').textContent = 
+        formatCurrency(price.low_24h.eur, 'EUR');
+    
+    // Market cap
+    document.getElementById('marketCap').textContent = 
+        formatLargeNumber(price.market_cap.eur) + ' €';
+    
+    // 24h volume
+    document.getElementById('volume24h').textContent = 
+        formatLargeNumber(price.total_volume.eur) + ' €';
+}
+
+// ============================================================================
+// Chart
+// ============================================================================
+
+async function loadChartData(days) {
+    try {
+        const response = await fetch(
+            `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?` +
+            `vs_currency=eur&days=${days}`
+        );
+        
+        if (!response.ok) throw new Error('Chart API Fehler');
+        
+        const data = await response.json();
+        updateChart(data.prices);
+        
+    } catch (error) {
+        console.error('Fehler beim Laden der Chart-Daten:', error);
+        showError('Chart konnte nicht geladen werden');
+    }
+}
+
+function updateChart(priceData) {
+    const ctx = document.getElementById('btcChart').getContext('2d');
+    
+    // Prepare data
+    const labels = priceData.map(point => {
+        const date = new Date(point[0]);
+        if (currentChartDays <= 7) {
+            return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit' });
+        } else if (currentChartDays <= 90) {
+            return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric' });
+        } else {
+            return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'short' });
+        }
+    });
+    
+    const prices = priceData.map(point => point[1]);
+    
+    // Destroy existing chart
+    if (btcChart) {
+        btcChart.destroy();
+    }
+    
+    // Create new chart
+    btcChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Bitcoin Preis (EUR)',
+                data: prices,
+                borderColor: '#f7931a',
+                backgroundColor: 'rgba(247, 147, 26, 0.1)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: '#f7931a',
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                intersect: false,
+                mode: 'index'
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    titleColor: '#fff',
+                    bodyColor: '#fff',
+                    borderColor: '#f7931a',
+                    borderWidth: 1,
+                    padding: 12,
+                    displayColors: false,
+                    callbacks: {
+                        label: function(context) {
+                            return formatCurrency(context.parsed.y, 'EUR');
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false,
+                        color: '#333'
+                    },
+                    ticks: {
+                        color: '#a0a0a0',
+                        maxTicksLimit: 8
+                    }
+                },
+                y: {
+                    grid: {
+                        color: '#333'
+                    },
+                    ticks: {
+                        color: '#a0a0a0',
+                        callback: function(value) {
+                            return formatCurrency(value, 'EUR', true);
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function setupChartControls() {
+    const buttons = document.querySelectorAll('.chart-btn');
+    
+    buttons.forEach(button => {
+        button.addEventListener('click', async () => {
+            // Remove active class from all buttons
+            buttons.forEach(btn => btn.classList.remove('active'));
+            // Add active class to clicked button
+            button.classList.add('active');
+            
+            // Get days value
+            const days = button.getAttribute('data-days');
+            currentChartDays = days === 'max' ? 'max' : parseInt(days);
+            
+            // Load new chart data
+            await loadChartData(currentChartDays);
+        });
+    });
+}
+
+// ============================================================================
+// Fundamental Indicators
+// ============================================================================
+
+async function loadFundamentalIndicators() {
+    // Since we're using free APIs, we'll calculate some indicators
+    // and use placeholder data for others that require premium APIs
+    
+    await calculate200WMA();
+    calculatePowerLaw();
+    calculateStockToFlow();
+    displayPlaceholderIndicators();
+}
+
+async function calculate200WMA() {
+    try {
+        // Get 200 weeks of data (approximately 1400 days)
+        const response = await fetch(
+            `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?` +
+            `vs_currency=eur&days=1400`
+        );
+        
+        if (!response.ok) throw new Error('200WMA API Fehler');
+        
+        const data = await response.json();
+        const prices = data.prices;
+        
+        // Calculate 200-week moving average
+        // 200 weeks = 1400 days, we'll use weekly data points
+        const weeklyPrices = [];
+        for (let i = 0; i < prices.length; i += 7) {
+            weeklyPrices.push(prices[i][1]);
+        }
+        
+        if (weeklyPrices.length >= 200) {
+            const last200Weeks = weeklyPrices.slice(-200);
+            const wma200 = last200Weeks.reduce((sum, price) => sum + price, 0) / 200;
+            
+            // Get current price
+            const currentPrice = prices[prices.length - 1][1];
+            const distance = ((currentPrice - wma200) / wma200) * 100;
+            
+            // Update UI
+            document.getElementById('wma200').innerHTML = formatCurrency(wma200, 'EUR');
+            document.getElementById('wma200Distance').textContent = 
+                `${distance >= 0 ? '+' : ''}${distance.toFixed(1)}%`;
+            
+            // Interpretation
+            const interpretation = document.getElementById('wma200Interpretation');
+            if (distance > 50) {
+                interpretation.textContent = '🔥 Deutlich über historischem Support';
+                interpretation.className = 'indicator-interpretation interpretation-bullish';
+            } else if (distance > 0) {
+                interpretation.textContent = '✅ Über 200W-MA Support';
+                interpretation.className = 'indicator-interpretation interpretation-bullish';
+            } else if (distance > -20) {
+                interpretation.textContent = '⚠️ Nahe Support-Level';
+                interpretation.className = 'indicator-interpretation interpretation-neutral';
+            } else {
+                interpretation.textContent = '📉 Unter historischem Support';
+                interpretation.className = 'indicator-interpretation interpretation-bearish';
+            }
+        }
+        
+    } catch (error) {
+        console.error('Fehler bei 200WMA Berechnung:', error);
+        document.getElementById('wma200').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+    }
+}
+
+function calculatePowerLaw() {
+    // Power Law Model: Price = 10^(-17.01) * (days since genesis)^5.82
+    // Genesis: 2009-01-03
+    const genesisDate = new Date('2009-01-03');
+    const today = new Date();
+    const daysSinceGenesis = Math.floor((today - genesisDate) / (1000 * 60 * 60 * 24));
+    
+    // Calculate power law price (in USD, we'll approximate EUR)
+    const powerLawPriceUSD = Math.pow(10, -17.01) * Math.pow(daysSinceGenesis, 5.82);
+    const powerLawPriceEUR = powerLawPriceUSD * 0.92; // Approximate conversion
+    
+    // Get current price (we'll use a stored value from previous API call)
+    // For now, we'll show the model price
+    document.getElementById('powerLaw').innerHTML = 
+        `<div style="font-size: 1rem; color: #a0a0a0;">Tage seit Genesis: ${daysSinceGenesis.toLocaleString('de-DE')}</div>`;
+    document.getElementById('powerLawFair').textContent = 
+        formatCurrency(powerLawPriceEUR, 'EUR');
+    
+    // Interpretation
+    const interpretation = document.getElementById('powerLawInterpretation');
+    interpretation.textContent = '📈 Langfristiges Wachstumsmodell';
+    interpretation.className = 'indicator-interpretation interpretation-neutral';
+}
+
+function calculateStockToFlow() {
+    // Stock-to-Flow calculation
+    // Current supply: ~19.8M BTC, Annual production: ~328,500 BTC (post-2024 halving)
+    const currentSupply = 19800000;
+    const annualProduction = 164250; // 900 BTC/day * 0.5 (after 2024 halving) * 365
+    const s2f = currentSupply / annualProduction;
+    
+    // S2F Model: Price = 0.4 * S2F^3 (approximate formula)
+    const s2fModelPriceUSD = 0.4 * Math.pow(s2f, 3);
+    const s2fModelPriceEUR = s2fModelPriceUSD * 0.92;
+    
+    document.getElementById('stockToFlow').innerHTML = 
+        `<div style="font-size: 1.5rem;">${s2f.toFixed(1)}</div>`;
+    document.getElementById('s2fModelPrice').textContent = 
+        formatCurrency(s2fModelPriceEUR, 'EUR');
+    
+    const interpretation = document.getElementById('s2fInterpretation');
+    interpretation.textContent = '💎 Hohe Knappheit (Post-Halving 2024)';
+    interpretation.className = 'indicator-interpretation interpretation-bullish';
+}
+
+function displayPlaceholderIndicators() {
+    // Coin Days Destroyed
+    document.getElementById('cdd').innerHTML = 
+        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
+    document.getElementById('cddAvg').textContent = '-';
+    const cddInterpretation = document.getElementById('cddInterpretation');
+    cddInterpretation.textContent = '📊 Glassnode API erforderlich';
+    cddInterpretation.className = 'indicator-interpretation interpretation-neutral';
+    
+    // MVRV Ratio
+    document.getElementById('mvrv').innerHTML = 
+        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
+    document.getElementById('mvrvZ').textContent = '-';
+    const mvrvInterpretation = document.getElementById('mvrvInterpretation');
+    mvrvInterpretation.textContent = '📊 Glassnode API erforderlich';
+    mvrvInterpretation.className = 'indicator-interpretation interpretation-neutral';
+    
+    // Puell Multiple
+    document.getElementById('puell').innerHTML = 
+        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
+    document.getElementById('puellStatus').textContent = '-';
+    const puellInterpretation = document.getElementById('puellInterpretation');
+    puellInterpretation.textContent = '📊 Glassnode API erforderlich';
+    puellInterpretation.className = 'indicator-interpretation interpretation-neutral';
+}
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+function formatCurrency(value, currency = 'EUR', short = false) {
+    if (short && value > 999) {
+        return value.toLocaleString('de-DE', {
+            style: 'currency',
+            currency: currency,
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        });
+    }
+    
+    return value.toLocaleString('de-DE', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function formatLargeNumber(num) {
+    if (num >= 1e12) {
+        return (num / 1e12).toFixed(2) + ' Bio.';
+    } else if (num >= 1e9) {
+        return (num / 1e9).toFixed(2) + ' Mrd.';
+    } else if (num >= 1e6) {
+        return (num / 1e6).toFixed(2) + ' Mio.';
+    }
+    return num.toLocaleString('de-DE');
+}
+
+function updateLastUpdateTime() {
+    const now = new Date();
+    document.getElementById('lastUpdate').textContent = 
+        now.toLocaleTimeString('de-DE', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            second: '2-digit'
+        });
+}
+
+function showError(message) {
+    console.error(message);
+    // Could add a toast notification here
+}
+
+// ============================================================================
+// Export for testing
+// ============================================================================
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        formatCurrency,
+        formatLargeNumber,
+        calculate200WMA,
+        calculatePowerLaw
+    };
+}

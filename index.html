@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Dashboard DACH - Live Daten & Fundamentale Indikatoren</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>₿ Bitcoin Dashboard</h1>
+                <p class="subtitle">Zentrale Informationsquelle für den DACH-Raum</p>
+            </div>
+            <div class="last-update">
+                Letzte Aktualisierung: <span id="lastUpdate">-</span>
+            </div>
+        </header>
+
+        <!-- Bitcoin Price Section -->
+        <section class="section price-section">
+            <div class="price-card main-price">
+                <h2>Bitcoin Preis</h2>
+                <div class="price-display">
+                    <div class="price" id="btcPrice">-</div>
+                    <div class="price-change" id="priceChange">-</div>
+                </div>
+                <div class="price-conversions">
+                    <div class="conversion">
+                        <span class="label">USD:</span>
+                        <span id="btcPriceUSD">-</span>
+                    </div>
+                    <div class="conversion">
+                        <span class="label">CHF:</span>
+                        <span id="btcPriceCHF">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">24h Hoch</div>
+                    <div class="stat-value" id="high24h">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">24h Tief</div>
+                    <div class="stat-value" id="low24h">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Marktkapitalisierung</div>
+                    <div class="stat-value" id="marketCap">-</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">24h Volumen</div>
+                    <div class="stat-value" id="volume24h">-</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="section chart-section">
+            <div class="chart-header">
+                <h2>Preisverlauf</h2>
+                <div class="chart-controls">
+                    <button class="chart-btn active" data-days="7">7T</button>
+                    <button class="chart-btn" data-days="30">30T</button>
+                    <button class="chart-btn" data-days="90">90T</button>
+                    <button class="chart-btn" data-days="365">1J</button>
+                    <button class="chart-btn" data-days="max">Max</button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="btcChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Fundamental Indicators -->
+        <section class="section indicators-section">
+            <h2>Fundamentale Indikatoren</h2>
+            <div class="indicators-grid">
+                <!-- 200 Week Moving Average -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>200-Wochen-MA</h3>
+                        <span class="info-icon" title="Historisch starkes Support-Level">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="wma200">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Abstand:</span>
+                        <span class="detail-value" id="wma200Distance">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="wma200Interpretation"></div>
+                </div>
+
+                <!-- Power Law Model -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Power Law Model</h3>
+                        <span class="info-icon" title="Langfristiges Preismodell basierend auf logarithmischer Regression">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="powerLaw">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Faire Bewertung:</span>
+                        <span class="detail-value" id="powerLawFair">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="powerLawInterpretation"></div>
+                </div>
+
+                <!-- Stock-to-Flow -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Stock-to-Flow Ratio</h3>
+                        <span class="info-icon" title="Verhältnis zwischen vorhandenem Bestand und Neuproduktion">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="stockToFlow">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">S2F Modellpreis:</span>
+                        <span class="detail-value" id="s2fModelPrice">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="s2fInterpretation"></div>
+                </div>
+
+                <!-- Coin Days Destroyed -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Coin Days Destroyed</h3>
+                        <span class="info-icon" title="Misst die Bewegung von lange gehaltenen Coins">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="cdd">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">90-Tage-Durchschnitt:</span>
+                        <span class="detail-value" id="cddAvg">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="cddInterpretation"></div>
+                </div>
+
+                <!-- MVRV Ratio -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>MVRV Ratio</h3>
+                        <span class="info-icon" title="Market Value to Realized Value - Überkauft/Überverkauft Indikator">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="mvrv">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Z-Score:</span>
+                        <span class="detail-value" id="mvrvZ">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="mvrvInterpretation"></div>
+                </div>
+
+                <!-- Puell Multiple -->
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Puell Multiple</h3>
+                        <span class="info-icon" title="Miner-Umsatz Indikator für Marktzyklen">ℹ️</span>
+                    </div>
+                    <div class="indicator-value" id="puell">
+                        <div class="loading">Lädt...</div>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Status:</span>
+                        <span class="detail-value" id="puellStatus">-</span>
+                    </div>
+                    <div class="indicator-interpretation" id="puellInterpretation"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Treasury Companies Section (Placeholder) -->
+        <section class="section treasury-section" style="display: none;">
+            <h2>Bitcoin Treasury Unternehmen</h2>
+            <div class="coming-soon">
+                <p>🚀 Demnächst verfügbar</p>
+                <p class="small">Strategy, MicroStrategy, Marathon Digital und mehr...</p>
+            </div>
+        </section>
+
+        <!-- News Section (Placeholder) -->
+        <section class="section news-section" style="display: none;">
+            <h2>📰 Wichtige News & Events</h2>
+            <div class="coming-soon">
+                <p>🤖 KI-generierte News kommen bald</p>
+                <p class="small">Automatische Zusammenfassungen wichtiger Bitcoin-Entwicklungen</p>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Daten bereitgestellt von CoinGecko & öffentlichen APIs</p>
+            <p class="small">Keine Anlageberatung. Eigene Recherche durchführen.</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
