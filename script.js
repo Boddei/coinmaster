@@ -13,6 +13,7 @@ const CONFIG = {
 // Global state
 let btcChart = null;
 let currentChartDays = 7;
+let currentChartScale = 'linear';
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -131,7 +132,7 @@ async function loadChartData(days) {
 
 function updateChart(priceData) {
     const ctx = document.getElementById('btcChart').getContext('2d');
-    
+
     // Prepare data
     const labels = priceData.map(point => {
         const date = new Date(point[0]);
@@ -143,14 +144,14 @@ function updateChart(priceData) {
             return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'short' });
         }
     });
-    
+
     const prices = priceData.map(point => point[1]);
-    
+
     // Destroy existing chart
     if (btcChart) {
         btcChart.destroy();
     }
-    
+
     // Create new chart
     btcChart = new Chart(ctx, {
         type: 'line',
@@ -209,6 +210,7 @@ function updateChart(priceData) {
                     }
                 },
                 y: {
+                    type: currentChartScale,
                     grid: {
                         color: '#333'
                     },
@@ -225,21 +227,32 @@ function updateChart(priceData) {
 }
 
 function setupChartControls() {
-    const buttons = document.querySelectorAll('.chart-btn');
-    
-    buttons.forEach(button => {
+    const timeframeButtons = document.querySelectorAll('.chart-btn[data-days]');
+    const scaleButtons = document.querySelectorAll('.chart-btn[data-scale]');
+
+    timeframeButtons.forEach(button => {
         button.addEventListener('click', async () => {
-            // Remove active class from all buttons
-            buttons.forEach(btn => btn.classList.remove('active'));
-            // Add active class to clicked button
+            timeframeButtons.forEach(btn => btn.classList.remove('active'));
             button.classList.add('active');
-            
-            // Get days value
+
             const days = button.getAttribute('data-days');
-            currentChartDays = days === 'max' ? 'max' : parseInt(days);
-            
-            // Load new chart data
+            currentChartDays = days === 'max' ? 'max' : parseInt(days, 10);
+
             await loadChartData(currentChartDays);
+        });
+    });
+
+    scaleButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            scaleButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            currentChartScale = button.getAttribute('data-scale') || 'linear';
+
+            if (btcChart) {
+                btcChart.options.scales.y.type = currentChartScale;
+                btcChart.update();
+            }
         });
     });
 }
