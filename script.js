@@ -14,6 +14,7 @@ const CONFIG = {
 let btcChart = null;
 let currentChartDays = 7;
 let currentChartScale = 'linear';
+let chartRequestId = 0;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -113,21 +114,44 @@ function updateStats(data) {
 // ============================================================================
 
 async function loadChartData(days) {
+    const requestId = ++chartRequestId;
+
     try {
-        const response = await fetch(
-            `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?` +
-            `vs_currency=eur&days=${days}`
-        );
+        const response = await fetch(buildChartUrl(days));
         
         if (!response.ok) throw new Error('Chart API Fehler');
         
         const data = await response.json();
+        if (requestId !== chartRequestId) return;
+
+        if (!Array.isArray(data.prices) || data.prices.length === 0) {
+            throw new Error('Keine Chart-Daten erhalten');
+        }
+
         updateChart(data.prices);
         
     } catch (error) {
+        if (requestId !== chartRequestId) return;
         console.error('Fehler beim Laden der Chart-Daten:', error);
         showError('Chart konnte nicht geladen werden');
     }
+}
+
+function buildChartUrl(days) {
+    const baseUrl = `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}`;
+
+    if (days === 'max') {
+        return `${baseUrl}/market_chart?vs_currency=eur&days=max`;
+    }
+
+    // Für längere Zeiträume ist /market_chart/range robuster als days-Parameter.
+    if (days > 365) {
+        const now = Math.floor(Date.now() / 1000);
+        const from = now - (days * 24 * 60 * 60);
+        return `${baseUrl}/market_chart/range?vs_currency=eur&from=${from}&to=${now}`;
+    }
+
+    return `${baseUrl}/market_chart?vs_currency=eur&days=${days}`;
 }
 
 function updateChart(priceData) {
