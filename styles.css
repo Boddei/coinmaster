@@ -191,6 +191,11 @@ body {
 .chart-controls {
     display: flex;
     gap: 8px;
+    flex-wrap: wrap;
+}
+
+.scale-controls {
+    margin-left: auto;
 }
 
 .chart-btn {
