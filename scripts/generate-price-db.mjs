@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 
 const START_DATE = '2010-01-01';
 const END_DATE = new Date().toISOString().slice(0, 10);
@@ -57,6 +57,7 @@ async function main() {
     rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)}`);
   }
 
+  await mkdir('data', { recursive: true });
   await writeFile('data/btc_daily_prices.csv', `${rows.join('\n')}\n`, 'utf8');
   console.log(`Fertig: data/btc_daily_prices.csv (${rows.length - 1} Zeilen)`);
 }

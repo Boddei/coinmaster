@@ -7,7 +7,8 @@ const CONFIG = {
         coin: 'bitcoin'
     },
     refreshInterval: 60000, // 1 minute
-    chartDays: 7
+    chartDays: 7,
+    localPriceDbPath: 'data/btc_daily_prices.csv'
 };
 
 // Global state
@@ -65,7 +66,17 @@ async function loadBitcoinData() {
         
     } catch (error) {
         console.error('Fehler beim Laden der Bitcoin-Daten:', error);
-        showError('Preisdaten konnten nicht geladen werden');
+        const fallbackRow = await getLatestLocalClose();
+        if (fallbackRow) {
+            document.getElementById('btcPrice').textContent = formatCurrency(fallbackRow.closeEur, 'EUR');
+            document.getElementById('btcPriceUSD').textContent = formatCurrency(fallbackRow.closeUsd, 'USD');
+            document.getElementById('btcPriceCHF').textContent = '—';
+            const changeElement = document.getElementById('priceChange');
+            changeElement.textContent = 'Offline-Modus (lokale CSV)';
+            changeElement.className = 'price-change';
+        } else {
+            showError('Preisdaten konnten nicht geladen werden');
+        }
     }
 }
 
@@ -136,8 +147,23 @@ async function loadChartData(days) {
     } catch (error) {
         if (requestId !== chartRequestId) return;
         console.error('Fehler beim Laden der Chart-Daten:', error);
-        showError('Chart konnte nicht geladen werden');
+        const localPrices = await fetchLocalCsvPrices();
+        const fallbackSeries = buildFallbackChartSeries(localPrices, days);
+
+        if (fallbackSeries.length > 0) {
+            updateChart(fallbackSeries);
+        } else {
+            showError('Chart konnte nicht geladen werden');
+        }
     }
+}
+
+function buildFallbackChartSeries(rows, days) {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+
+    const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+    const usableRows = days === 'max' ? sorted : sorted.slice(-days);
+    return usableRows.map(row => [Date.parse(`${row.date}T00:00:00Z`), row.closeEur]);
 }
 
 function buildChartUrl(days) {
@@ -374,6 +400,40 @@ function triggerCsvDownload(filename, content) {
     document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
+}
+
+async function fetchLocalCsvPrices() {
+    try {
+        const response = await fetch(CONFIG.localPriceDbPath, { cache: 'no-store' });
+        if (!response.ok) return [];
+
+        const csv = await response.text();
+        const lines = csv.trim().split('\n');
+        const rows = [];
+
+        for (let i = 1; i < lines.length; i += 1) {
+            const [date, closeEur, closeUsd] = lines[i].split(',');
+            if (!date || !closeEur || !closeUsd) continue;
+
+            rows.push({
+                date,
+                closeEur: Number(closeEur),
+                closeUsd: Number(closeUsd)
+            });
+        }
+
+        return rows.filter(row => Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
+    } catch (error) {
+        console.warn('Lokale CSV konnte nicht geladen werden:', error);
+        return [];
+    }
+}
+
+async function getLatestLocalClose() {
+    const rows = await fetchLocalCsvPrices();
+    if (rows.length === 0) return null;
+
+    return rows.reduce((latest, row) => (row.date > latest.date ? row : latest), rows[0]);
 }
 
 // ============================================================================
