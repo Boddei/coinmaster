@@ -231,6 +231,33 @@ body {
     position: relative;
 }
 
+
+/* Data Section */
+.data-description {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+}
+
+.data-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.data-status {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.data-status.ok {
+    color: var(--green);
+}
+
+.data-status.error {
+    color: var(--red);
+}
+
 /* Indicators Section */
 .indicators-grid {
     display: grid;
