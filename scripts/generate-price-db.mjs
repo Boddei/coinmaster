@@ -67,21 +67,28 @@ async function main() {
   const usdDaily = pickDailyClose(usdPoints);
 
   const allDates = [...new Set([...eurDaily.keys(), ...usdDaily.keys()])].sort();
-  const rows = ['date,close_eur,close_usd,sma50d_usd,sma200d_usd,sma200w_usd'];
+  const rows = ['date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd'];
   const validDates = allDates.filter((date) => eurDaily.get(date) != null && usdDaily.get(date) != null);
+  const eurSeries = validDates.map((date) => eurDaily.get(date));
   const usdSeries = validDates.map((date) => usdDaily.get(date));
-  const sma50 = rollingAverage(usdSeries, 50);
-  const sma200 = rollingAverage(usdSeries, 200);
-  const sma1400 = rollingAverage(usdSeries, 1400);
+  const sma50Eur = rollingAverage(eurSeries, 50);
+  const sma200Eur = rollingAverage(eurSeries, 200);
+  const sma1400Eur = rollingAverage(eurSeries, 1400);
+  const sma50Usd = rollingAverage(usdSeries, 50);
+  const sma200Usd = rollingAverage(usdSeries, 200);
+  const sma1400Usd = rollingAverage(usdSeries, 1400);
   let validIndex = 0;
 
   for (const date of validDates) {
     const eur = eurDaily.get(date);
     const usd = usdDaily.get(date);
-    const ma50 = sma50[validIndex] != null ? sma50[validIndex].toFixed(2) : '';
-    const ma200 = sma200[validIndex] != null ? sma200[validIndex].toFixed(2) : '';
-    const ma200w = sma1400[validIndex] != null ? sma1400[validIndex].toFixed(2) : '';
-    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50},${ma200},${ma200w}`);
+    const ma50Eur = sma50Eur[validIndex] != null ? sma50Eur[validIndex].toFixed(2) : '';
+    const ma200Eur = sma200Eur[validIndex] != null ? sma200Eur[validIndex].toFixed(2) : '';
+    const ma200wEur = sma1400Eur[validIndex] != null ? sma1400Eur[validIndex].toFixed(2) : '';
+    const ma50Usd = sma50Usd[validIndex] != null ? sma50Usd[validIndex].toFixed(2) : '';
+    const ma200Usd = sma200Usd[validIndex] != null ? sma200Usd[validIndex].toFixed(2) : '';
+    const ma200wUsd = sma1400Usd[validIndex] != null ? sma1400Usd[validIndex].toFixed(2) : '';
+    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd}`);
     validIndex += 1;
   }
 

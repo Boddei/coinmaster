@@ -441,13 +441,16 @@ async function fetchLocalCsvPrices() {
         const rows = [];
 
         for (let i = 1; i < lines.length; i += 1) {
-            const [date, closeEur, closeUsd, sma50dUsd, sma200dUsd, sma200wUsd] = lines[i].split(',');
+            const [date, closeEur, closeUsd, sma50dEur, sma200dEur, sma200wEur, sma50dUsd, sma200dUsd, sma200wUsd] = lines[i].split(',');
             if (!date || !closeEur || !closeUsd) continue;
 
             rows.push({
                 date,
                 closeEur: Number(closeEur),
                 closeUsd: Number(closeUsd),
+                sma50dEur: toNullableNumber(sma50dEur),
+                sma200dEur: toNullableNumber(sma200dEur),
+                sma200wEur: toNullableNumber(sma200wEur),
                 sma50dUsd: toNullableNumber(sma50dUsd),
                 sma200dUsd: toNullableNumber(sma200dUsd),
                 sma200wUsd: toNullableNumber(sma200wUsd)
@@ -497,9 +500,9 @@ function attachCalculatedMovingAverages(rows) {
 
         return {
             ...row,
-            sma50dEur: index >= eurWindow.sma50dEur - 1 ? eurSum50 / eurWindow.sma50dEur : null,
-            sma200dEur: index >= eurWindow.sma200dEur - 1 ? eurSum200 / eurWindow.sma200dEur : null,
-            sma200wEur: index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null,
+            sma50dEur: row.sma50dEur ?? (index >= eurWindow.sma50dEur - 1 ? eurSum50 / eurWindow.sma50dEur : null),
+            sma200dEur: row.sma200dEur ?? (index >= eurWindow.sma200dEur - 1 ? eurSum200 / eurWindow.sma200dEur : null),
+            sma200wEur: row.sma200wEur ?? (index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null),
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
             sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null)

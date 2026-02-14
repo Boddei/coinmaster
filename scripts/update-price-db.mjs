@@ -100,17 +100,24 @@ async function main() {
   });
 
   const mergedRows = [...existing, ...parsedNewRows].sort((a, b) => a.date.localeCompare(b.date));
+  const eurSeries = mergedRows.map((row) => row.closeEur);
   const usdSeries = mergedRows.map((row) => row.closeUsd);
-  const sma50 = rollingAverage(usdSeries, 50);
-  const sma200 = rollingAverage(usdSeries, 200);
-  const sma1400 = rollingAverage(usdSeries, 1400);
+  const sma50Eur = rollingAverage(eurSeries, 50);
+  const sma200Eur = rollingAverage(eurSeries, 200);
+  const sma1400Eur = rollingAverage(eurSeries, 1400);
+  const sma50Usd = rollingAverage(usdSeries, 50);
+  const sma200Usd = rollingAverage(usdSeries, 200);
+  const sma1400Usd = rollingAverage(usdSeries, 1400);
 
-  const header = 'date,close_eur,close_usd,sma50d_usd,sma200d_usd,sma200w_usd';
+  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd';
   const serializedRows = mergedRows.map((row, index) => {
-    const ma50 = sma50[index] != null ? sma50[index].toFixed(2) : '';
-    const ma200 = sma200[index] != null ? sma200[index].toFixed(2) : '';
-    const ma200w = sma1400[index] != null ? sma1400[index].toFixed(2) : '';
-    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50},${ma200},${ma200w}`;
+    const ma50Eur = sma50Eur[index] != null ? sma50Eur[index].toFixed(2) : '';
+    const ma200Eur = sma200Eur[index] != null ? sma200Eur[index].toFixed(2) : '';
+    const ma200wEur = sma1400Eur[index] != null ? sma1400Eur[index].toFixed(2) : '';
+    const ma50Usd = sma50Usd[index] != null ? sma50Usd[index].toFixed(2) : '';
+    const ma200Usd = sma200Usd[index] != null ? sma200Usd[index].toFixed(2) : '';
+    const ma200wUsd = sma1400Usd[index] != null ? sma1400Usd[index].toFixed(2) : '';
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd}`;
   });
 
   const merged = [header, ...serializedRows].join('\n') + '\n';
