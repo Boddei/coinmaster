@@ -18,9 +18,9 @@ let currentChartScale = 'linear';
 let chartRequestId = 0;
 let localPriceRows = [];
 const maVisibility = {
-    sma50d: true,
-    sma200d: true,
-    sma200w: true
+    sma50d: false,
+    sma200d: false,
+    sma200w: false
 };
 
 // Initialize
@@ -169,7 +169,7 @@ function buildFallbackChartSeries(rows, days) {
     const usableRows = days === 'max' ? sorted : sorted.slice(-days);
     return usableRows.map(row => ({
         timestamp: Date.parse(`${row.date}T00:00:00Z`),
-        price: row.closeEur,
+        price: row.closeUsd,
         sma50d: row.sma50dUsd,
         sma200d: row.sma200dUsd,
         sma200w: row.sma200wUsd
@@ -197,17 +197,17 @@ function buildChartUrl(days) {
     const baseUrl = `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}`;
 
     if (days === 'max') {
-        return `${baseUrl}/market_chart?vs_currency=eur&days=max`;
+        return `${baseUrl}/market_chart?vs_currency=usd&days=max`;
     }
 
     // Für längere Zeiträume ist /market_chart/range robuster als days-Parameter.
     if (days > 365) {
         const now = Math.floor(Date.now() / 1000);
         const from = now - (days * 24 * 60 * 60);
-        return `${baseUrl}/market_chart/range?vs_currency=eur&from=${from}&to=${now}`;
+        return `${baseUrl}/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
     }
 
-    return `${baseUrl}/market_chart?vs_currency=eur&days=${days}`;
+    return `${baseUrl}/market_chart?vs_currency=usd&days=${days}`;
 }
 
 function updateChart(priceData) {
@@ -242,7 +242,7 @@ function updateChart(priceData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Bitcoin Preis (EUR)',
+                    label: 'Bitcoin Preis (USD)',
                     data: prices,
                     borderColor: '#f7931a',
                     backgroundColor: 'rgba(247, 147, 26, 0.1)',
@@ -270,7 +270,7 @@ function updateChart(priceData) {
                 {
                     label: 'MA 200D (USD)',
                     data: sma200d,
-                    borderColor: '#f59e0b',
+                    borderColor: '#a855f7',
                     backgroundColor: 'transparent',
                     borderWidth: 2,
                     fill: false,
@@ -340,7 +340,7 @@ function updateChart(priceData) {
                     ticks: {
                         color: '#a0a0a0',
                         callback: function(value) {
-                            return formatCurrency(value, 'EUR', true);
+                            return formatCurrency(value, 'USD', true);
                         }
                     }
                 }
