@@ -49,6 +49,23 @@ async function loadExistingRows() {
   }
 }
 
+function rollingAverage(values, windowSize) {
+  const result = new Array(values.length).fill(null);
+  let sum = 0;
+
+  for (let i = 0; i < values.length; i += 1) {
+    sum += values[i];
+    if (i >= windowSize) {
+      sum -= values[i - windowSize];
+    }
+    if (i >= windowSize - 1) {
+      result[i] = sum / windowSize;
+    }
+  }
+
+  return result;
+}
+
 async function main() {
   const existing = await loadExistingRows();
   const lastDate = existing.length > 0 ? existing[existing.length - 1].date : '2010-01-01';
@@ -77,9 +94,26 @@ async function main() {
     return;
   }
 
-  const header = 'date,close_eur,close_usd';
-  const existingRows = existing.map((row) => `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)}`);
-  const merged = [header, ...existingRows, ...newRows].join('\n') + '\n';
+  const parsedNewRows = newRows.map((line) => {
+    const [date, closeEur, closeUsd] = line.split(',');
+    return { date, closeEur: Number(closeEur), closeUsd: Number(closeUsd) };
+  });
+
+  const mergedRows = [...existing, ...parsedNewRows].sort((a, b) => a.date.localeCompare(b.date));
+  const usdSeries = mergedRows.map((row) => row.closeUsd);
+  const sma50 = rollingAverage(usdSeries, 50);
+  const sma200 = rollingAverage(usdSeries, 200);
+  const sma1400 = rollingAverage(usdSeries, 1400);
+
+  const header = 'date,close_eur,close_usd,sma50d_usd,sma200d_usd,sma200w_usd';
+  const serializedRows = mergedRows.map((row, index) => {
+    const ma50 = sma50[index] != null ? sma50[index].toFixed(2) : '';
+    const ma200 = sma200[index] != null ? sma200[index].toFixed(2) : '';
+    const ma200w = sma1400[index] != null ? sma1400[index].toFixed(2) : '';
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50},${ma200},${ma200w}`;
+  });
+
+  const merged = [header, ...serializedRows].join('\n') + '\n';
 
   await mkdir('data', { recursive: true });
   await writeFile(DB_PATH, merged, 'utf8');

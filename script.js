@@ -16,6 +16,12 @@ let btcChart = null;
 let currentChartDays = 7;
 let currentChartScale = 'linear';
 let chartRequestId = 0;
+let localPriceRows = [];
+const maVisibility = {
+    sma50d: true,
+    sma200d: true,
+    sma200w: true
+};
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
     console.log('Bitcoin Dashboard initialisiert...');
+    localPriceRows = await fetchLocalCsvPrices();
     
     // Load initial data
     await loadBitcoinData();
@@ -139,12 +146,12 @@ async function loadChartData(days) {
             throw new Error('Keine Chart-Daten erhalten');
         }
 
-        updateChart(data.prices);
+        updateChart(enrichMarketPricesWithMovingAverages(data.prices, localPriceRows));
         
     } catch (error) {
         if (requestId !== chartRequestId) return;
         console.error('Fehler beim Laden der Chart-Daten:', error);
-        const localPrices = await fetchLocalCsvPrices();
+        const localPrices = localPriceRows.length > 0 ? localPriceRows : await fetchLocalCsvPrices();
         const fallbackSeries = buildFallbackChartSeries(localPrices, days);
 
         if (fallbackSeries.length > 0) {
@@ -160,7 +167,30 @@ function buildFallbackChartSeries(rows, days) {
 
     const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
     const usableRows = days === 'max' ? sorted : sorted.slice(-days);
-    return usableRows.map(row => [Date.parse(`${row.date}T00:00:00Z`), row.closeEur]);
+    return usableRows.map(row => ({
+        timestamp: Date.parse(`${row.date}T00:00:00Z`),
+        price: row.closeEur,
+        sma50d: row.sma50dUsd,
+        sma200d: row.sma200dUsd,
+        sma200w: row.sma200wUsd
+    }));
+}
+
+function enrichMarketPricesWithMovingAverages(priceData, rows) {
+    const rowByDate = new Map(rows.map((row) => [row.date, row]));
+
+    return priceData.map((point) => {
+        const timestamp = point[0];
+        const row = rowByDate.get(new Date(timestamp).toISOString().slice(0, 10));
+
+        return {
+            timestamp,
+            price: point[1],
+            sma50d: row?.sma50dUsd ?? null,
+            sma200d: row?.sma200dUsd ?? null,
+            sma200w: row?.sma200wUsd ?? null
+        };
+    });
 }
 
 function buildChartUrl(days) {
@@ -185,7 +215,7 @@ function updateChart(priceData) {
 
     // Prepare data
     const labels = priceData.map(point => {
-        const date = new Date(point[0]);
+        const date = new Date(point.timestamp);
         if (currentChartDays <= 7) {
             return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit' });
         } else if (currentChartDays <= 90) {
@@ -195,7 +225,10 @@ function updateChart(priceData) {
         }
     });
 
-    const prices = priceData.map(point => point[1]);
+    const prices = priceData.map(point => point.price);
+    const sma50d = priceData.map(point => point.sma50d);
+    const sma200d = priceData.map(point => point.sma200d);
+    const sma200w = priceData.map(point => point.sma200w);
 
     // Destroy existing chart
     if (btcChart) {
@@ -207,20 +240,58 @@ function updateChart(priceData) {
         type: 'line',
         data: {
             labels: labels,
-            datasets: [{
-                label: 'Bitcoin Preis (EUR)',
-                data: prices,
-                borderColor: '#f7931a',
-                backgroundColor: 'rgba(247, 147, 26, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 0,
-                pointHoverRadius: 6,
-                pointHoverBackgroundColor: '#f7931a',
-                pointHoverBorderColor: '#fff',
-                pointHoverBorderWidth: 2
-            }]
+            datasets: [
+                {
+                    label: 'Bitcoin Preis (EUR)',
+                    data: prices,
+                    borderColor: '#f7931a',
+                    backgroundColor: 'rgba(247, 147, 26, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    pointHoverBackgroundColor: '#f7931a',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 2
+                },
+                {
+                    label: 'MA 50D (USD)',
+                    data: sma50d,
+                    borderColor: '#4a9eff',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.sma50d
+                },
+                {
+                    label: 'MA 200D (USD)',
+                    data: sma200d,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.sma200d
+                },
+                {
+                    label: 'MA 200W (USD)',
+                    data: sma200w,
+                    borderColor: '#10b981',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.sma200w
+                }
+            ]
         },
         options: {
             responsive: true,
@@ -240,10 +311,12 @@ function updateChart(priceData) {
                     borderColor: '#f7931a',
                     borderWidth: 1,
                     padding: 12,
-                    displayColors: false,
+                    displayColors: true,
                     callbacks: {
                         label: function(context) {
-                            return formatCurrency(context.parsed.y, 'EUR');
+                            if (context.parsed.y == null) return `${context.dataset.label}: -`;
+                            const currency = context.dataset.label.includes('(USD)') ? 'USD' : 'EUR';
+                            return `${context.dataset.label}: ${formatCurrency(context.parsed.y, currency)}`;
                         }
                     }
                 }
@@ -279,6 +352,7 @@ function updateChart(priceData) {
 function setupChartControls() {
     const timeframeButtons = document.querySelectorAll('.chart-btn[data-days]');
     const scaleButtons = document.querySelectorAll('.chart-btn[data-scale]');
+    const maButtons = document.querySelectorAll('.ma-btn[data-ma]');
 
     timeframeButtons.forEach(button => {
         button.addEventListener('click', async () => {
@@ -305,6 +379,34 @@ function setupChartControls() {
             }
         });
     });
+
+    maButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+            const maKey = button.getAttribute('data-ma');
+            if (!maKey || !(maKey in maVisibility)) return;
+
+            maVisibility[maKey] = !maVisibility[maKey];
+            button.classList.toggle('active', maVisibility[maKey]);
+
+            if (!btcChart) return;
+
+            const datasetIndexMap = {
+                sma50d: 1,
+                sma200d: 2,
+                sma200w: 3
+            };
+
+            const datasetIndex = datasetIndexMap[maKey];
+            btcChart.data.datasets[datasetIndex].hidden = !maVisibility[maKey];
+            btcChart.update();
+        });
+    });
+}
+
+function toNullableNumber(value) {
+    if (value == null || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
 }
 
 async function fetchLocalCsvPrices() {
@@ -317,13 +419,16 @@ async function fetchLocalCsvPrices() {
         const rows = [];
 
         for (let i = 1; i < lines.length; i += 1) {
-            const [date, closeEur, closeUsd] = lines[i].split(',');
+            const [date, closeEur, closeUsd, sma50dUsd, sma200dUsd, sma200wUsd] = lines[i].split(',');
             if (!date || !closeEur || !closeUsd) continue;
 
             rows.push({
                 date,
                 closeEur: Number(closeEur),
-                closeUsd: Number(closeUsd)
+                closeUsd: Number(closeUsd),
+                sma50dUsd: toNullableNumber(sma50dUsd),
+                sma200dUsd: toNullableNumber(sma200dUsd),
+                sma200wUsd: toNullableNumber(sma200wUsd)
             });
         }
 
