@@ -15,6 +15,7 @@ const CONFIG = {
 let btcChart = null;
 let currentChartDays = 7;
 let currentChartScale = 'linear';
+let currentChartCurrency = 'eur';
 let chartRequestId = 0;
 let localPriceRows = [];
 const maVisibility = {
@@ -167,12 +168,18 @@ function buildFallbackChartSeries(rows, days) {
 
     const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
     const usableRows = days === 'max' ? sorted : sorted.slice(-days);
+
+    const priceKey = currentChartCurrency === 'usd' ? 'closeUsd' : 'closeEur';
+    const sma50Key = currentChartCurrency === 'usd' ? 'sma50dUsd' : 'sma50dEur';
+    const sma200Key = currentChartCurrency === 'usd' ? 'sma200dUsd' : 'sma200dEur';
+    const sma200wKey = currentChartCurrency === 'usd' ? 'sma200wUsd' : 'sma200wEur';
+
     return usableRows.map(row => ({
         timestamp: Date.parse(`${row.date}T00:00:00Z`),
-        price: row.closeUsd,
-        sma50d: row.sma50dUsd,
-        sma200d: row.sma200dUsd,
-        sma200w: row.sma200wUsd
+        price: row[priceKey],
+        sma50d: row[sma50Key],
+        sma200d: row[sma200Key],
+        sma200w: row[sma200wKey]
     }));
 }
 
@@ -182,13 +189,16 @@ function enrichMarketPricesWithMovingAverages(priceData, rows) {
     return priceData.map((point) => {
         const timestamp = point[0];
         const row = rowByDate.get(new Date(timestamp).toISOString().slice(0, 10));
+        const sma50d = currentChartCurrency === 'usd' ? row?.sma50dUsd : row?.sma50dEur;
+        const sma200d = currentChartCurrency === 'usd' ? row?.sma200dUsd : row?.sma200dEur;
+        const sma200w = currentChartCurrency === 'usd' ? row?.sma200wUsd : row?.sma200wEur;
 
         return {
             timestamp,
             price: point[1],
-            sma50d: row?.sma50dUsd ?? null,
-            sma200d: row?.sma200dUsd ?? null,
-            sma200w: row?.sma200wUsd ?? null
+            sma50d: sma50d ?? null,
+            sma200d: sma200d ?? null,
+            sma200w: sma200w ?? null
         };
     });
 }
@@ -197,17 +207,17 @@ function buildChartUrl(days) {
     const baseUrl = `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}`;
 
     if (days === 'max') {
-        return `${baseUrl}/market_chart?vs_currency=usd&days=max`;
+        return `${baseUrl}/market_chart?vs_currency=${currentChartCurrency}&days=max`;
     }
 
     // Für längere Zeiträume ist /market_chart/range robuster als days-Parameter.
     if (days > 365) {
         const now = Math.floor(Date.now() / 1000);
         const from = now - (days * 24 * 60 * 60);
-        return `${baseUrl}/market_chart/range?vs_currency=usd&from=${from}&to=${now}`;
+        return `${baseUrl}/market_chart/range?vs_currency=${currentChartCurrency}&from=${from}&to=${now}`;
     }
 
-    return `${baseUrl}/market_chart?vs_currency=usd&days=${days}`;
+    return `${baseUrl}/market_chart?vs_currency=${currentChartCurrency}&days=${days}`;
 }
 
 function updateChart(priceData) {
@@ -229,6 +239,7 @@ function updateChart(priceData) {
     const sma50d = priceData.map(point => point.sma50d);
     const sma200d = priceData.map(point => point.sma200d);
     const sma200w = priceData.map(point => point.sma200w);
+    const chartCurrency = currentChartCurrency.toUpperCase();
 
     // Destroy existing chart
     if (btcChart) {
@@ -242,7 +253,7 @@ function updateChart(priceData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Bitcoin Preis (USD)',
+                    label: `Bitcoin Preis (${chartCurrency})`,
                     data: prices,
                     borderColor: '#f7931a',
                     backgroundColor: 'rgba(247, 147, 26, 0.1)',
@@ -256,7 +267,7 @@ function updateChart(priceData) {
                     pointHoverBorderWidth: 2
                 },
                 {
-                    label: 'MA 50D (USD)',
+                    label: `MA 50D (${chartCurrency})`,
                     data: sma50d,
                     borderColor: '#4a9eff',
                     backgroundColor: 'transparent',
@@ -268,7 +279,7 @@ function updateChart(priceData) {
                     hidden: !maVisibility.sma50d
                 },
                 {
-                    label: 'MA 200D (USD)',
+                    label: `MA 200D (${chartCurrency})`,
                     data: sma200d,
                     borderColor: '#a855f7',
                     backgroundColor: 'transparent',
@@ -280,7 +291,7 @@ function updateChart(priceData) {
                     hidden: !maVisibility.sma200d
                 },
                 {
-                    label: 'MA 200W (USD)',
+                    label: `MA 200W (${chartCurrency})`,
                     data: sma200w,
                     borderColor: '#10b981',
                     backgroundColor: 'transparent',
@@ -315,7 +326,7 @@ function updateChart(priceData) {
                     callbacks: {
                         label: function(context) {
                             if (context.parsed.y == null) return `${context.dataset.label}: -`;
-                            const currency = context.dataset.label.includes('(USD)') ? 'USD' : 'EUR';
+                            const currency = currentChartCurrency.toUpperCase();
                             return `${context.dataset.label}: ${formatCurrency(context.parsed.y, currency)}`;
                         }
                     }
@@ -340,7 +351,7 @@ function updateChart(priceData) {
                     ticks: {
                         color: '#a0a0a0',
                         callback: function(value) {
-                            return formatCurrency(value, 'USD', true);
+                            return formatCurrency(value, currentChartCurrency.toUpperCase(), true);
                         }
                     }
                 }
@@ -352,6 +363,7 @@ function updateChart(priceData) {
 function setupChartControls() {
     const timeframeButtons = document.querySelectorAll('.chart-btn[data-days]');
     const scaleButtons = document.querySelectorAll('.chart-btn[data-scale]');
+    const currencyButtons = document.querySelectorAll('.chart-btn[data-currency]');
     const maButtons = document.querySelectorAll('.ma-btn[data-ma]');
 
     timeframeButtons.forEach(button => {
@@ -377,6 +389,16 @@ function setupChartControls() {
                 btcChart.options.scales.y.type = currentChartScale;
                 btcChart.update();
             }
+        });
+    });
+
+    currencyButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            currencyButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            currentChartCurrency = button.getAttribute('data-currency') || 'eur';
+            await loadChartData(currentChartDays);
         });
     });
 
@@ -432,11 +454,57 @@ async function fetchLocalCsvPrices() {
             });
         }
 
-        return rows.filter(row => Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
+        const validRows = rows.filter(row => Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
+        return attachCalculatedMovingAverages(validRows);
     } catch (error) {
         console.warn('Lokale CSV konnte nicht geladen werden:', error);
         return [];
     }
+}
+
+function attachCalculatedMovingAverages(rows) {
+    const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+    const eurWindow = { sma50dEur: 50, sma200dEur: 200, sma200wEur: 1400 };
+    const usdWindow = { sma50dUsd: 50, sma200dUsd: 200, sma200wUsd: 1400 };
+
+    let eurSum50 = 0;
+    let eurSum200 = 0;
+    let eurSum1400 = 0;
+    let usdSum50 = 0;
+    let usdSum200 = 0;
+    let usdSum1400 = 0;
+
+    return sorted.map((row, index) => {
+        eurSum50 += row.closeEur;
+        eurSum200 += row.closeEur;
+        eurSum1400 += row.closeEur;
+        usdSum50 += row.closeUsd;
+        usdSum200 += row.closeUsd;
+        usdSum1400 += row.closeUsd;
+
+        if (index >= eurWindow.sma50dEur) {
+            eurSum50 -= sorted[index - eurWindow.sma50dEur].closeEur;
+            usdSum50 -= sorted[index - usdWindow.sma50dUsd].closeUsd;
+        }
+        if (index >= eurWindow.sma200dEur) {
+            eurSum200 -= sorted[index - eurWindow.sma200dEur].closeEur;
+            usdSum200 -= sorted[index - usdWindow.sma200dUsd].closeUsd;
+        }
+        if (index >= eurWindow.sma200wEur) {
+            eurSum1400 -= sorted[index - eurWindow.sma200wEur].closeEur;
+            usdSum1400 -= sorted[index - usdWindow.sma200wUsd].closeUsd;
+        }
+
+        return {
+            ...row,
+            sma50dEur: index >= eurWindow.sma50dEur - 1 ? eurSum50 / eurWindow.sma50dEur : null,
+            sma200dEur: index >= eurWindow.sma200dEur - 1 ? eurSum200 / eurWindow.sma200dEur : null,
+            sma200wEur: index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null,
+            sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
+            sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
+            sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null)
+        };
+    });
 }
 
 async function getLatestLocalClose() {
