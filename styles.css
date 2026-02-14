@@ -231,6 +231,61 @@ body {
     position: relative;
 }
 
+.ma-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+.ma-btn {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.ma-btn:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.ma-btn.active {
+    color: var(--bg-primary);
+}
+
+.ma-btn[data-ma="sma50d"] {
+    border-color: #4a9eff;
+    color: #4a9eff;
+}
+
+.ma-btn[data-ma="sma50d"].active {
+    background: #4a9eff;
+}
+
+.ma-btn[data-ma="sma200d"] {
+    border-color: #f59e0b;
+    color: #f59e0b;
+}
+
+.ma-btn[data-ma="sma200d"].active {
+    background: #f59e0b;
+}
+
+.ma-btn[data-ma="sma200w"] {
+    border-color: #10b981;
+    color: #10b981;
+}
+
+.ma-btn[data-ma="sma200w"].active {
+    background: #10b981;
+}
+
 
 /* Data Section */
 .data-description {
