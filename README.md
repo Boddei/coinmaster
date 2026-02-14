@@ -22,7 +22,7 @@ Du kannst eine **permanente Daily-Close-Datenbasis** ab dem 01.01.2010 erzeugen:
 node scripts/generate-price-db.mjs
 ```
 
-Das Skript erzeugt `data/btc_daily_prices.csv` mit täglichen BTC-Schlusskursen sowie 50d/200d/200w gleitenden Durchschnitten für EUR und USD.
+Das Skript erzeugt `data/btc_daily_prices.csv` mit täglichen BTC-Schlusskursen, 50d/200d/200w gleitenden Durchschnitten (EUR/USD) sowie drei EUR-Power-Law-Quantilkurven (`powerlaw_q01_eur`, `powerlaw_q50_eur`, `powerlaw_q99_eur`).
 
 ## Automatisch 1x pro Tag aktualisieren
 
