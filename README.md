@@ -17,17 +17,7 @@ Wenn CoinGecko ausfällt oder geblockt wird, nutzt das Dashboard automatisch die
 
 Du kannst eine **permanente Daily-Close-Datenbasis** ab dem 01.01.2010 erzeugen:
 
-### Option A: Direkt im Dashboard (Excel-kompatible CSV)
-1. Dashboard lokal starten (z. B. mit einem Static Server).
-2. Im Abschnitt **„Lokale Preisdatenbank (Daily Close)”** auf **„CSV erzeugen & herunterladen”** klicken.
-3. Die Datei `btc_daily_prices.csv` in `data/` legen und ins Repo einchecken.
-
-CSV-Spalten:
-- `date` (YYYY-MM-DD)
-- `close_eur`
-- `close_usd`
-
-### Option B: Per Skript erzeugen
+### Per Skript erzeugen
 ```bash
 node scripts/generate-price-db.mjs
 ```
