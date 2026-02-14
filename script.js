@@ -30,9 +30,6 @@ async function initApp() {
     await loadChartData(currentChartDays);
     await loadFundamentalIndicators();
 
-    // Setup local price database controls
-    setupLocalPriceDatabase();
-    
     // Setup chart controls
     setupChartControls();
     
@@ -310,98 +307,6 @@ function setupChartControls() {
     });
 }
 
-// ============================================================================
-// Local Price Database
-// ============================================================================
-
-function setupLocalPriceDatabase() {
-    const generateButton = document.getElementById('generatePriceDb');
-    const statusElement = document.getElementById('priceDbStatus');
-
-    if (!generateButton || !statusElement) return;
-
-    generateButton.addEventListener('click', async () => {
-        const originalText = generateButton.textContent;
-        generateButton.disabled = true;
-        generateButton.textContent = 'Erzeuge CSV...';
-        statusElement.textContent = 'Lade historische Kurse von CoinGecko...';
-        statusElement.className = 'data-status';
-
-        try {
-            const csvContent = await buildDailyPriceCsv('2010-01-01');
-            triggerCsvDownload('btc_daily_prices.csv', csvContent);
-
-            const rowCount = Math.max(csvContent.trim().split('\n').length - 1, 0);
-            statusElement.textContent = `✅ CSV erzeugt (${rowCount.toLocaleString('de-DE')} Tage)`;
-            statusElement.classList.add('ok');
-        } catch (error) {
-            console.error('Fehler beim Erzeugen der lokalen Preisdatenbank:', error);
-            statusElement.textContent = '❌ Fehler beim Laden der historischen Kurse';
-            statusElement.classList.add('error');
-        } finally {
-            generateButton.disabled = false;
-            generateButton.textContent = originalText;
-        }
-    });
-}
-
-async function buildDailyPriceCsv(startDateIso = '2010-01-01') {
-    const from = Math.floor(new Date(`${startDateIso}T00:00:00Z`).getTime() / 1000);
-    const to = Math.floor(Date.now() / 1000);
-
-    const [eurData, usdData] = await Promise.all([
-        fetchDailyCloseSeries('eur', from, to),
-        fetchDailyCloseSeries('usd', from, to)
-    ]);
-
-    const allDates = [...new Set([...eurData.keys(), ...usdData.keys()])].sort();
-    const rows = ['date,close_eur,close_usd'];
-
-    allDates.forEach(date => {
-        const eur = eurData.get(date);
-        const usd = usdData.get(date);
-        if (eur == null || usd == null) return;
-        rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)}`);
-    });
-
-    return `${rows.join('\n')}\n`;
-}
-
-async function fetchDailyCloseSeries(vsCurrency, from, to) {
-    const response = await fetch(
-        `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart/range?vs_currency=${vsCurrency}&from=${from}&to=${to}`
-    );
-
-    if (!response.ok) {
-        throw new Error(`Historische Daten konnten nicht geladen werden (${vsCurrency})`);
-    }
-
-    const data = await response.json();
-    const prices = data.prices || [];
-    const dailyClose = new Map();
-
-    prices.forEach(([timestamp, price]) => {
-        const date = new Date(timestamp).toISOString().slice(0, 10);
-        dailyClose.set(date, Number(price));
-    });
-
-    return dailyClose;
-}
-
-function triggerCsvDownload(filename, content) {
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    URL.revokeObjectURL(url);
-}
-
 async function fetchLocalCsvPrices() {
     try {
         const response = await fetch(CONFIG.localPriceDbPath, { cache: 'no-store' });
@@ -634,8 +539,6 @@ if (typeof module !== 'undefined' && module.exports) {
         formatCurrency,
         formatLargeNumber,
         calculate200WMA,
-        calculatePowerLaw,
-        buildDailyPriceCsv,
-        triggerCsvDownload
+        calculatePowerLaw
     };
 }
