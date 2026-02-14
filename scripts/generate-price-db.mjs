@@ -137,7 +137,7 @@ async function main() {
   const usdDaily = pickDailyClose(usdPoints);
 
   const allDates = [...new Set([...eurDaily.keys(), ...usdDaily.keys()])].sort();
-  const rows = ['date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur'];
+  const rows = ['date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd'];
   const validDates = allDates.filter((date) => eurDaily.get(date) != null && usdDaily.get(date) != null);
   const eurSeries = validDates.map((date) => eurDaily.get(date));
   const usdSeries = validDates.map((date) => usdDaily.get(date));
@@ -148,11 +148,15 @@ async function main() {
   const sma200Usd = rollingAverage(usdSeries, 200);
   const sma1400Usd = rollingAverage(usdSeries, 1400);
   const q01 = fitLogLogQuantileRegression(validDates, eurSeries, 0.01);
+  const q01Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.01);
   const q50 = fitLogLogQuantileRegression(validDates, eurSeries, 0.5);
+  const q50Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.5);
   const q99 = fitLogLogQuantileRegression(validDates, eurSeries, 0.99);
+  const q99Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.99);
   let validIndex = 0;
 
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
+  console.log(`USD Power-Law Parameter: q01(alpha=${q01Usd.alpha.toFixed(6)}, beta=${q01Usd.beta.toFixed(6)}), q50(alpha=${q50Usd.alpha.toFixed(6)}, beta=${q50Usd.beta.toFixed(6)}), q99(alpha=${q99Usd.alpha.toFixed(6)}, beta=${q99Usd.beta.toFixed(6)})`);
 
   for (const date of validDates) {
     const eur = eurDaily.get(date);
@@ -166,7 +170,10 @@ async function main() {
     const plQ01Eur = predictPowerLaw(date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(date, q99.alpha, q99.beta).toFixed(2);
-    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur}`);
+    const plQ01Usd = predictPowerLaw(date, q01Usd.alpha, q01Usd.beta).toFixed(2);
+    const plQ50Usd = predictPowerLaw(date, q50Usd.alpha, q50Usd.beta).toFixed(2);
+    const plQ99Usd = predictPowerLaw(date, q99Usd.alpha, q99Usd.beta).toFixed(2);
+    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${plQ01Usd},${plQ50Usd},${plQ99Usd}`);
     validIndex += 1;
   }
 
