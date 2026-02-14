@@ -187,12 +187,16 @@ async function main() {
   const sma200Usd = rollingAverage(usdSeries, 200);
   const sma1400Usd = rollingAverage(usdSeries, 1400);
   const q01 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.01);
+  const q01Usd = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.01);
   const q50 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.5);
+  const q50Usd = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.5);
   const q99 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.99);
+  const q99Usd = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.99);
 
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
+  console.log(`USD Power-Law Parameter: q01(alpha=${q01Usd.alpha.toFixed(6)}, beta=${q01Usd.beta.toFixed(6)}), q50(alpha=${q50Usd.alpha.toFixed(6)}, beta=${q50Usd.beta.toFixed(6)}), q99(alpha=${q99Usd.alpha.toFixed(6)}, beta=${q99Usd.beta.toFixed(6)})`);
 
-  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur';
+  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd';
   const serializedRows = mergedRows.map((row, index) => {
     const ma50Eur = sma50Eur[index] != null ? sma50Eur[index].toFixed(2) : '';
     const ma200Eur = sma200Eur[index] != null ? sma200Eur[index].toFixed(2) : '';
@@ -203,7 +207,10 @@ async function main() {
     const plQ01Eur = predictPowerLaw(row.date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(row.date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(row.date, q99.alpha, q99.beta).toFixed(2);
-    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur}`;
+    const plQ01Usd = predictPowerLaw(row.date, q01Usd.alpha, q01Usd.beta).toFixed(2);
+    const plQ50Usd = predictPowerLaw(row.date, q50Usd.alpha, q50Usd.beta).toFixed(2);
+    const plQ99Usd = predictPowerLaw(row.date, q99Usd.alpha, q99Usd.beta).toFixed(2);
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${plQ01Usd},${plQ50Usd},${plQ99Usd}`;
   });
 
   const merged = [header, ...serializedRows].join('\n') + '\n';

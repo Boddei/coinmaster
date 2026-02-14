@@ -21,7 +21,8 @@ let localPriceRows = [];
 const maVisibility = {
     sma50d: false,
     sma200d: false,
-    sma200w: false
+    sma200w: false,
+    powerlaw: false
 };
 
 // Initialize
@@ -173,13 +174,19 @@ function buildFallbackChartSeries(rows, days) {
     const sma50Key = currentChartCurrency === 'usd' ? 'sma50dUsd' : 'sma50dEur';
     const sma200Key = currentChartCurrency === 'usd' ? 'sma200dUsd' : 'sma200dEur';
     const sma200wKey = currentChartCurrency === 'usd' ? 'sma200wUsd' : 'sma200wEur';
+    const powerLawQ01Key = currentChartCurrency === 'usd' ? 'powerLawQ01Usd' : 'powerLawQ01Eur';
+    const powerLawQ50Key = currentChartCurrency === 'usd' ? 'powerLawQ50Usd' : 'powerLawQ50Eur';
+    const powerLawQ99Key = currentChartCurrency === 'usd' ? 'powerLawQ99Usd' : 'powerLawQ99Eur';
 
     return usableRows.map(row => ({
         timestamp: Date.parse(`${row.date}T00:00:00Z`),
         price: row[priceKey],
         sma50d: row[sma50Key],
         sma200d: row[sma200Key],
-        sma200w: row[sma200wKey]
+        sma200w: row[sma200wKey],
+        powerLawQ01: row[powerLawQ01Key],
+        powerLawQ50: row[powerLawQ50Key],
+        powerLawQ99: row[powerLawQ99Key]
     }));
 }
 
@@ -192,13 +199,19 @@ function enrichMarketPricesWithMovingAverages(priceData, rows) {
         const sma50d = currentChartCurrency === 'usd' ? row?.sma50dUsd : row?.sma50dEur;
         const sma200d = currentChartCurrency === 'usd' ? row?.sma200dUsd : row?.sma200dEur;
         const sma200w = currentChartCurrency === 'usd' ? row?.sma200wUsd : row?.sma200wEur;
+        const powerLawQ01 = currentChartCurrency === 'usd' ? row?.powerLawQ01Usd : row?.powerLawQ01Eur;
+        const powerLawQ50 = currentChartCurrency === 'usd' ? row?.powerLawQ50Usd : row?.powerLawQ50Eur;
+        const powerLawQ99 = currentChartCurrency === 'usd' ? row?.powerLawQ99Usd : row?.powerLawQ99Eur;
 
         return {
             timestamp,
             price: point[1],
             sma50d: sma50d ?? null,
             sma200d: sma200d ?? null,
-            sma200w: sma200w ?? null
+            sma200w: sma200w ?? null,
+            powerLawQ01: powerLawQ01 ?? null,
+            powerLawQ50: powerLawQ50 ?? null,
+            powerLawQ99: powerLawQ99 ?? null
         };
     });
 }
@@ -239,6 +252,9 @@ function updateChart(priceData) {
     const sma50d = priceData.map(point => point.sma50d);
     const sma200d = priceData.map(point => point.sma200d);
     const sma200w = priceData.map(point => point.sma200w);
+    const powerLawQ01 = priceData.map(point => point.powerLawQ01);
+    const powerLawQ50 = priceData.map(point => point.powerLawQ50);
+    const powerLawQ99 = priceData.map(point => point.powerLawQ99);
     const chartCurrency = currentChartCurrency.toUpperCase();
 
     // Destroy existing chart
@@ -301,6 +317,45 @@ function updateChart(priceData) {
                     pointRadius: 0,
                     spanGaps: true,
                     hidden: !maVisibility.sma200w
+                },
+                {
+                    label: `Power Law 1% (${chartCurrency})`,
+                    data: powerLawQ01,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [6, 4],
+                    fill: false,
+                    tension: 0.25,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.powerlaw
+                },
+                {
+                    label: `Power Law 50% (${chartCurrency})`,
+                    data: powerLawQ50,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [6, 4],
+                    fill: false,
+                    tension: 0.25,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.powerlaw
+                },
+                {
+                    label: `Power Law 99% (${chartCurrency})`,
+                    data: powerLawQ99,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [6, 4],
+                    fill: false,
+                    tension: 0.25,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.powerlaw
                 }
             ]
         },
@@ -415,11 +470,19 @@ function setupChartControls() {
             const datasetIndexMap = {
                 sma50d: 1,
                 sma200d: 2,
-                sma200w: 3
+                sma200w: 3,
+                powerlaw: [4, 5, 6]
             };
 
             const datasetIndex = datasetIndexMap[maKey];
-            btcChart.data.datasets[datasetIndex].hidden = !maVisibility[maKey];
+            if (Array.isArray(datasetIndex)) {
+                datasetIndex.forEach((index) => {
+                    btcChart.data.datasets[index].hidden = !maVisibility[maKey];
+                });
+            } else {
+                btcChart.data.datasets[datasetIndex].hidden = !maVisibility[maKey];
+            }
+
             btcChart.update();
         });
     });
@@ -441,7 +504,23 @@ async function fetchLocalCsvPrices() {
         const rows = [];
 
         for (let i = 1; i < lines.length; i += 1) {
-            const [date, closeEur, closeUsd, sma50dEur, sma200dEur, sma200wEur, sma50dUsd, sma200dUsd, sma200wUsd] = lines[i].split(',');
+            const [
+                date,
+                closeEur,
+                closeUsd,
+                sma50dEur,
+                sma200dEur,
+                sma200wEur,
+                sma50dUsd,
+                sma200dUsd,
+                sma200wUsd,
+                powerLawQ01Eur,
+                powerLawQ50Eur,
+                powerLawQ99Eur,
+                powerLawQ01Usd,
+                powerLawQ50Usd,
+                powerLawQ99Usd
+            ] = lines[i].split(',');
             if (!date || !closeEur || !closeUsd) continue;
 
             rows.push({
@@ -453,7 +532,13 @@ async function fetchLocalCsvPrices() {
                 sma200wEur: toNullableNumber(sma200wEur),
                 sma50dUsd: toNullableNumber(sma50dUsd),
                 sma200dUsd: toNullableNumber(sma200dUsd),
-                sma200wUsd: toNullableNumber(sma200wUsd)
+                sma200wUsd: toNullableNumber(sma200wUsd),
+                powerLawQ01Eur: toNullableNumber(powerLawQ01Eur),
+                powerLawQ50Eur: toNullableNumber(powerLawQ50Eur),
+                powerLawQ99Eur: toNullableNumber(powerLawQ99Eur),
+                powerLawQ01Usd: toNullableNumber(powerLawQ01Usd),
+                powerLawQ50Usd: toNullableNumber(powerLawQ50Usd),
+                powerLawQ99Usd: toNullableNumber(powerLawQ99Usd)
             });
         }
 
@@ -476,6 +561,16 @@ function attachCalculatedMovingAverages(rows) {
     let usdSum50 = 0;
     let usdSum200 = 0;
     let usdSum1400 = 0;
+
+    const dateSeries = sorted.map((row) => row.date);
+    const eurSeries = sorted.map((row) => row.closeEur);
+    const usdSeries = sorted.map((row) => row.closeUsd);
+    const eurQ01 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.01);
+    const eurQ50 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.5);
+    const eurQ99 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.99);
+    const usdQ01 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.01);
+    const usdQ50 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.5);
+    const usdQ99 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.99);
 
     return sorted.map((row, index) => {
         eurSum50 += row.closeEur;
@@ -505,9 +600,85 @@ function attachCalculatedMovingAverages(rows) {
             sma200wEur: row.sma200wEur ?? (index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null),
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
-            sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null)
+            sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null),
+            powerLawQ01Eur: row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01.alpha, eurQ01.beta),
+            powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50.alpha, eurQ50.beta),
+            powerLawQ99Eur: row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99.alpha, eurQ99.beta),
+            powerLawQ01Usd: row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01.alpha, usdQ01.beta),
+            powerLawQ50Usd: row.powerLawQ50Usd ?? predictPowerLaw(row.date, usdQ50.alpha, usdQ50.beta),
+            powerLawQ99Usd: row.powerLawQ99Usd ?? predictPowerLaw(row.date, usdQ99.alpha, usdQ99.beta)
         };
     });
+}
+
+function fitLogLogQuantileRegression(dates, prices, tau, options = {}) {
+    const {
+        iterations = 12000,
+        learningRate = 0.02,
+        epsilon = 1e-9
+    } = options;
+
+    const samples = dates.map((date, index) => {
+        const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+        const price = prices[index];
+        return {
+            logX: Math.log(Math.max(dayNumber, 1)),
+            logY: Math.log(Math.max(price, epsilon))
+        };
+    });
+
+    const n = samples.length;
+    const meanX = samples.reduce((acc, point) => acc + point.logX, 0) / n;
+    const meanY = samples.reduce((acc, point) => acc + point.logY, 0) / n;
+    const covariance = samples.reduce((acc, point) => acc + ((point.logX - meanX) * (point.logY - meanY)), 0);
+    const varianceX = samples.reduce((acc, point) => acc + ((point.logX - meanX) ** 2), 0);
+
+    let beta = varianceX === 0 ? 0 : covariance / varianceX;
+    let alpha = meanY - (beta * meanX);
+
+    let mAlpha = 0;
+    let mBeta = 0;
+    let vAlpha = 0;
+    let vBeta = 0;
+    const beta1 = 0.9;
+    const beta2 = 0.999;
+
+    for (let step = 1; step <= iterations; step += 1) {
+        let gradAlpha = 0;
+        let gradBeta = 0;
+
+        for (const sample of samples) {
+            const prediction = alpha + (beta * sample.logX);
+            const residual = sample.logY - prediction;
+            const psi = residual >= 0 ? tau : tau - 1;
+
+            gradAlpha -= psi;
+            gradBeta -= psi * sample.logX;
+        }
+
+        gradAlpha /= n;
+        gradBeta /= n;
+
+        mAlpha = (beta1 * mAlpha) + ((1 - beta1) * gradAlpha);
+        mBeta = (beta1 * mBeta) + ((1 - beta1) * gradBeta);
+        vAlpha = (beta2 * vAlpha) + ((1 - beta2) * gradAlpha * gradAlpha);
+        vBeta = (beta2 * vBeta) + ((1 - beta2) * gradBeta * gradBeta);
+
+        const mAlphaHat = mAlpha / (1 - (beta1 ** step));
+        const mBetaHat = mBeta / (1 - (beta1 ** step));
+        const vAlphaHat = vAlpha / (1 - (beta2 ** step));
+        const vBetaHat = vBeta / (1 - (beta2 ** step));
+
+        alpha -= learningRate * (mAlphaHat / (Math.sqrt(vAlphaHat) + epsilon));
+        beta -= learningRate * (mBetaHat / (Math.sqrt(vBetaHat) + epsilon));
+    }
+
+    return { alpha, beta };
+}
+
+function predictPowerLaw(date, alpha, beta) {
+    const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+    return Math.exp(alpha + (beta * Math.log(Math.max(dayNumber, 1))));
 }
 
 async function getLatestLocalClose() {
