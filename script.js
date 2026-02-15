@@ -928,7 +928,6 @@ async function loadFundamentalIndicators() {
     await calculate200WMA();
     calculatePowerLaw();
     calculateStockToFlow();
-    displayPlaceholderIndicators();
 }
 
 async function calculate200WMA() {
@@ -995,17 +994,15 @@ function calculatePowerLaw() {
             .filter(Number.isFinite)
             .map((value) => Math.max(0, Math.min(100, value)));
 
-        const daysBelowCurrentIndex = indexSeries.filter((value) => value < currentIndexPercent).length;
-        const belowSharePercent = (daysBelowCurrentIndex / indexSeries.length) * 100;
-        const cheaperThanPercent = 100 - belowSharePercent;
+        const daysBelowOrEqualCurrentIndex = indexSeries.filter((value) => value <= currentIndexPercent).length;
+        const belowOrEqualSharePercent = (daysBelowOrEqualCurrentIndex / indexSeries.length) * 100;
 
-        document.getElementById('powerLaw').innerHTML =
-            `<div style="font-size: 1rem; color: #a0a0a0;">Index (0% = untere Linie, 100% = obere Linie): ${currentIndexPercent.toFixed(1)}%</div>`;
+        document.getElementById('powerLaw').innerHTML = `<div style="font-size: 1.5rem;">${currentIndexPercent.toFixed(1)}%</div>`;
         document.getElementById('powerLawQ01').textContent = formatCurrency(q01, 'USD');
         document.getElementById('powerLawQ50').textContent = Number.isFinite(q50) ? formatCurrency(q50, 'USD') : '-';
         document.getElementById('powerLawQ99').textContent = formatCurrency(q99, 'USD');
         document.getElementById('powerLawPercentile').textContent =
-            `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
+            `Unterhalb dieses Index: ${belowOrEqualSharePercent.toFixed(1)}% der Zeit`;
 
         const interpretation = document.getElementById('powerLawInterpretation');
         interpretation.textContent = '';
@@ -1040,32 +1037,6 @@ function calculateStockToFlow() {
     const interpretation = document.getElementById('s2fInterpretation');
     interpretation.textContent = '💎 Hohe Knappheit (Post-Halving 2024)';
     interpretation.className = 'indicator-interpretation interpretation-bullish';
-}
-
-function displayPlaceholderIndicators() {
-    // Coin Days Destroyed
-    document.getElementById('cdd').innerHTML = 
-        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
-    document.getElementById('cddAvg').textContent = '-';
-    const cddInterpretation = document.getElementById('cddInterpretation');
-    cddInterpretation.textContent = '📊 Glassnode API erforderlich';
-    cddInterpretation.className = 'indicator-interpretation interpretation-neutral';
-    
-    // MVRV Ratio
-    document.getElementById('mvrv').innerHTML = 
-        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
-    document.getElementById('mvrvZ').textContent = '-';
-    const mvrvInterpretation = document.getElementById('mvrvInterpretation');
-    mvrvInterpretation.textContent = '📊 Glassnode API erforderlich';
-    mvrvInterpretation.className = 'indicator-interpretation interpretation-neutral';
-    
-    // Puell Multiple
-    document.getElementById('puell').innerHTML = 
-        '<div style="font-size: 1rem; color: #a0a0a0;">Premium Daten erforderlich</div>';
-    document.getElementById('puellStatus').textContent = '-';
-    const puellInterpretation = document.getElementById('puellInterpretation');
-    puellInterpretation.textContent = '📊 Glassnode API erforderlich';
-    puellInterpretation.className = 'indicator-interpretation interpretation-neutral';
 }
 
 // ============================================================================
