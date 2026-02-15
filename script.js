@@ -8,7 +8,8 @@ const CONFIG = {
     },
     refreshInterval: 60000, // 1 minute
     chartDays: 7,
-    localPriceDbPath: 'data/btc_daily_prices.csv'
+    localPriceDbPath: 'data/btc_daily_prices.csv',
+    totalCoinsEver: 20999999.9769
 };
 
 // Global state
@@ -107,6 +108,7 @@ async function loadBitcoinData() {
         const data = await response.json();
         updatePriceDisplay(data);
         updateStats(data);
+        await updateNetworkStats(data);
         
     } catch (error) {
         console.error('Fehler beim Laden der Bitcoin-Daten:', error);
@@ -118,8 +120,10 @@ async function loadBitcoinData() {
             const changeElement = document.getElementById('priceChange');
             changeElement.textContent = 'Offline-Modus (lokale CSV)';
             changeElement.className = 'price-change';
+            clearNetworkStats();
         } else {
             showError('Preisdaten konnten nicht geladen werden');
+            clearNetworkStats();
         }
     }
 }
@@ -165,6 +169,66 @@ function updateStats(data) {
     // 24h volume
     document.getElementById('volume24h').textContent = 
         formatLargeNumber(price.total_volume.eur) + ' €';
+}
+
+async function updateNetworkStats(data) {
+    const circulatingSupply = data?.market_data?.circulating_supply;
+    document.getElementById('circulatingSupply').textContent =
+        Number.isFinite(circulatingSupply) ? `${formatBtcAmount(circulatingSupply)} BTC` : '-';
+    document.getElementById('totalCoinsEver').textContent =
+        `Jemals: ${formatBtcAmount(CONFIG.totalCoinsEver)} BTC`;
+
+    let blockHeight = null;
+    let hashrateEh = null;
+
+    try {
+        const [heightResponse, hashrateResponse] = await Promise.all([
+            fetch('https://mempool.space/api/blocks/tip/height'),
+            fetch('https://mempool.space/api/v1/mining/hashrate/1m')
+        ]);
+
+        if (heightResponse.ok) {
+            const heightText = await heightResponse.text();
+            blockHeight = Number.parseInt(heightText, 10);
+        }
+
+        if (hashrateResponse.ok) {
+            const hashrateData = await hashrateResponse.json();
+            if (Number.isFinite(hashrateData?.currentHashrate)) {
+                hashrateEh = hashrateData.currentHashrate / 1e18;
+            }
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Netzwerkdaten:', error);
+    }
+
+    document.getElementById('blockHeight').textContent =
+        Number.isFinite(blockHeight) ? blockHeight.toLocaleString('de-DE') : '-';
+
+    document.getElementById('networkHashrate').textContent =
+        Number.isFinite(hashrateEh) ? `${hashrateEh.toFixed(1)} EH/s` : '-';
+
+    const blockSubsidy = calculateBlockSubsidy(blockHeight);
+    const annualInflation = (Number.isFinite(blockSubsidy) && Number.isFinite(circulatingSupply) && circulatingSupply > 0)
+        ? ((blockSubsidy * 144 * 365.25) / circulatingSupply) * 100
+        : null;
+
+    document.getElementById('annualInflation').textContent =
+        Number.isFinite(annualInflation) ? `${annualInflation.toFixed(2)}%` : '-';
+}
+
+function calculateBlockSubsidy(blockHeight) {
+    if (!Number.isFinite(blockHeight) || blockHeight < 0) return null;
+    const halvings = Math.floor(blockHeight / 210000);
+    if (halvings >= 64) return 0;
+    return 50 / (2 ** halvings);
+}
+
+function clearNetworkStats() {
+    ['blockHeight', 'circulatingSupply', 'totalCoinsEver', 'annualInflation', 'networkHashrate']
+        .forEach((id) => {
+            document.getElementById(id).textContent = '-';
+        });
 }
 
 // ============================================================================
@@ -997,12 +1061,15 @@ function calculatePowerLaw() {
         const daysBelowOrEqualCurrentIndex = indexSeries.filter((value) => value <= currentIndexPercent).length;
         const belowOrEqualSharePercent = (daysBelowOrEqualCurrentIndex / indexSeries.length) * 100;
 
-        document.getElementById('powerLaw').innerHTML = `<div style="font-size: 1.5rem;">${currentIndexPercent.toFixed(1)}%</div>`;
         document.getElementById('powerLawQ01').textContent = formatCurrency(q01, 'USD');
         document.getElementById('powerLawQ50').textContent = Number.isFinite(q50) ? formatCurrency(q50, 'USD') : '-';
         document.getElementById('powerLawQ99').textContent = formatCurrency(q99, 'USD');
+        const cheaperThanPercent = 100 - belowOrEqualSharePercent;
+
+        document.getElementById('powerLaw').innerHTML =
+            `<div style="font-size: 1.5rem;">${currentIndexPercent.toFixed(1)}% des PL-Bereichs</div>`;
         document.getElementById('powerLawPercentile').textContent =
-            `Unterhalb dieses Index: ${belowOrEqualSharePercent.toFixed(1)}% der Zeit`;
+            `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
         const interpretation = document.getElementById('powerLawInterpretation');
         interpretation.textContent = '';
@@ -1058,6 +1125,13 @@ function formatCurrency(value, currency = 'EUR', short = false) {
         currency: currency,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
+    });
+}
+
+function formatBtcAmount(value) {
+    return value.toLocaleString('de-DE', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 4
     });
 }
 
