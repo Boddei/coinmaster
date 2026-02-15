@@ -25,6 +25,43 @@ const maVisibility = {
     powerlaw: false
 };
 
+const POWER_LAW_SERIES = [
+    { key: 'powerLawQ01', color: '#ef4444', label: 'Q01' },
+    { key: 'powerLawQ50', color: '#f59e0b', label: 'Q50' },
+    { key: 'powerLawQ99', color: '#22c55e', label: 'Q99' }
+];
+
+const powerLawFormulaOverlayPlugin = {
+    id: 'powerLawFormulaOverlay',
+    afterDatasetsDraw(chart) {
+        const formulas = chart?.config?.options?.plugins?.powerLawFormulaOverlay?.formulas;
+        if (!Array.isArray(formulas) || formulas.length === 0) return;
+
+        const { ctx, chartArea } = chart;
+        if (!chartArea) return;
+
+        const rightPadding = 12;
+        const bottomPadding = 12;
+        const lineHeight = 18;
+        let y = chartArea.bottom - bottomPadding - ((formulas.length - 1) * lineHeight);
+
+        ctx.save();
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.font = '12px Inter, Arial, sans-serif';
+
+        formulas.forEach((formula) => {
+            ctx.fillStyle = formula.color;
+            ctx.fillText(formula.text, chartArea.right - rightPadding, y);
+            y += lineHeight;
+        });
+
+        ctx.restore();
+    }
+};
+
+Chart.register(powerLawFormulaOverlayPlugin);
+
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
@@ -256,6 +293,9 @@ function updateChart(priceData) {
     const powerLawQ50 = priceData.map(point => point.powerLawQ50);
     const powerLawQ99 = priceData.map(point => point.powerLawQ99);
     const chartCurrency = currentChartCurrency.toUpperCase();
+    const powerLawFormulas = maVisibility.powerlaw
+        ? buildPowerLawFormulas(priceData)
+        : [];
 
     // Destroy existing chart
     if (btcChart) {
@@ -370,6 +410,9 @@ function updateChart(priceData) {
                 legend: {
                     display: false
                 },
+                powerLawFormulaOverlay: {
+                    formulas: powerLawFormulas
+                },
                 tooltip: {
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     titleColor: '#fff',
@@ -413,6 +456,59 @@ function updateChart(priceData) {
             }
         }
     });
+}
+
+function buildPowerLawFormulas(priceData) {
+    return POWER_LAW_SERIES.map((series) => {
+        const fit = fitPowerLawCurve(priceData, series.key);
+        if (!fit) return null;
+
+        const coefficient = Number.isFinite(fit.coefficient) ? fit.coefficient.toExponential(2) : 'n/a';
+        const exponent = Number.isFinite(fit.exponent) ? fit.exponent.toFixed(3) : 'n/a';
+
+        return {
+            color: series.color,
+            text: `${series.label}: P = ${coefficient} · d^${exponent}`
+        };
+    }).filter(Boolean);
+}
+
+function fitPowerLawCurve(priceData, key) {
+    const samples = priceData
+        .map((point) => ({
+            day: Math.floor(point.timestamp / (1000 * 60 * 60 * 24)),
+            value: point[key]
+        }))
+        .filter((sample) => Number.isFinite(sample.value) && sample.value > 0 && sample.day > 0);
+
+    if (samples.length < 2) return null;
+
+    const transformed = samples.map((sample) => ({
+        x: Math.log(sample.day),
+        y: Math.log(sample.value)
+    }));
+
+    const n = transformed.length;
+    const meanX = transformed.reduce((sum, point) => sum + point.x, 0) / n;
+    const meanY = transformed.reduce((sum, point) => sum + point.y, 0) / n;
+
+    let numerator = 0;
+    let denominator = 0;
+
+    transformed.forEach((point) => {
+        numerator += (point.x - meanX) * (point.y - meanY);
+        denominator += (point.x - meanX) ** 2;
+    });
+
+    if (denominator === 0) return null;
+
+    const exponent = numerator / denominator;
+    const intercept = meanY - (exponent * meanX);
+
+    return {
+        coefficient: Math.exp(intercept),
+        exponent
+    };
 }
 
 function setupChartControls() {
