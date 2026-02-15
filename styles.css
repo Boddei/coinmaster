@@ -159,6 +159,10 @@ body {
     gap: 15px;
 }
 
+.network-stats-grid {
+    margin-bottom: 15px;
+}
+
 .stat-card {
     background: var(--bg-card);
     padding: 20px;
@@ -176,6 +180,12 @@ body {
     font-size: 1.5rem;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+.stat-subvalue {
+    margin-top: 6px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
 }
 
 /* Chart Section */
