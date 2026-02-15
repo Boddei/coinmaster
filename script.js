@@ -933,57 +933,41 @@ async function loadFundamentalIndicators() {
 
 async function calculate200WMA() {
     try {
-        // Get 200 weeks of data (approximately 1400 days)
-        const response = await fetch(
-            `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?` +
-            `vs_currency=eur&days=1400`
-        );
-        
-        if (!response.ok) throw new Error('200WMA API Fehler');
-        
-        const data = await response.json();
-        const prices = data.prices;
-        
-        // Calculate 200-week moving average
-        // 200 weeks = 1400 days, we'll use weekly data points
-        const weeklyPrices = [];
-        for (let i = 0; i < prices.length; i += 7) {
-            weeklyPrices.push(prices[i][1]);
-        }
-        
-        if (weeklyPrices.length >= 200) {
-            const last200Weeks = weeklyPrices.slice(-200);
-            const wma200 = last200Weeks.reduce((sum, price) => sum + price, 0) / 200;
-            
-            // Get current price
-            const currentPrice = prices[prices.length - 1][1];
-            const distance = ((currentPrice - wma200) / wma200) * 100;
-            
-            // Update UI
-            document.getElementById('wma200').innerHTML = formatCurrency(wma200, 'EUR');
-            document.getElementById('wma200Distance').textContent = 
-                `${distance >= 0 ? '+' : ''}${distance.toFixed(1)}%`;
-            
-            // Interpretation
-            const interpretation = document.getElementById('wma200Interpretation');
-            if (distance > 50) {
-                interpretation.textContent = '🔥 Deutlich über historischem Support';
-                interpretation.className = 'indicator-interpretation interpretation-bullish';
-            } else if (distance > 0) {
-                interpretation.textContent = '✅ Über 200W-MA Support';
-                interpretation.className = 'indicator-interpretation interpretation-bullish';
-            } else if (distance > -20) {
-                interpretation.textContent = '⚠️ Nahe Support-Level';
-                interpretation.className = 'indicator-interpretation interpretation-neutral';
-            } else {
-                interpretation.textContent = '📉 Unter historischem Support';
-                interpretation.className = 'indicator-interpretation interpretation-bearish';
-            }
-        }
-        
+        const modelRows = localPriceRows
+            .filter((row) => Number.isFinite(row.closeUsd) && Number.isFinite(row.sma200wUsd))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        if (modelRows.length === 0) throw new Error('Keine 200WMA Modelldaten verfügbar');
+
+        const latestRow = modelRows[modelRows.length - 1];
+        const currentPriceUsd = latestRow.closeUsd;
+        const current200WmaUsd = latestRow.sma200wUsd;
+        const currentRatioPercent = (currentPriceUsd / current200WmaUsd) * 100;
+
+        const ratioSeries = modelRows
+            .map((row) => (row.closeUsd / row.sma200wUsd) * 100)
+            .filter(Number.isFinite);
+
+        const daysBelowCurrentRatio = ratioSeries.filter((ratio) => ratio < currentRatioPercent).length;
+        const belowSharePercent = (daysBelowCurrentRatio / ratioSeries.length) * 100;
+        const cheaperThanPercent = 100 - belowSharePercent;
+
+        document.getElementById('wma200').innerHTML = formatCurrency(current200WmaUsd, 'USD');
+        document.getElementById('wma200Distance').textContent = `${currentRatioPercent.toFixed(1)}%`;
+        document.getElementById('wma200UnderRatio').textContent =
+            `${belowSharePercent.toFixed(1)}% der Tage darunter`;
+
+        const interpretation = document.getElementById('wma200Interpretation');
+        interpretation.textContent =
+            `Der Kurs stand ${belowSharePercent.toFixed(1)}% aller Tage unter ${currentRatioPercent.toFixed(1)}% des damaligen 200WMA – Bitcoin ist damit günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit (Modellbasis USD).`;
+        interpretation.className = 'indicator-interpretation interpretation-neutral';
+
     } catch (error) {
         console.error('Fehler bei 200WMA Berechnung:', error);
         document.getElementById('wma200').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+        document.getElementById('wma200Distance').textContent = '-';
+        document.getElementById('wma200UnderRatio').textContent = '-';
+        document.getElementById('wma200Interpretation').textContent = '';
     }
 }
 
