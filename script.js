@@ -18,6 +18,7 @@ let currentChartScale = 'linear';
 let currentChartCurrency = 'eur';
 let chartRequestId = 0;
 let localPriceRows = [];
+let projectionDate = '';
 const maVisibility = {
     sma50d: false,
     sma200d: false,
@@ -185,7 +186,8 @@ async function loadChartData(days) {
             throw new Error('Keine Chart-Daten erhalten');
         }
 
-        updateChart(enrichMarketPricesWithMovingAverages(data.prices, localPriceRows));
+        const enrichedData = enrichMarketPricesWithMovingAverages(data.prices, localPriceRows);
+        updateChart(extendSeriesWithProjection(enrichedData));
         
     } catch (error) {
         if (requestId !== chartRequestId) return;
@@ -194,7 +196,7 @@ async function loadChartData(days) {
         const fallbackSeries = buildFallbackChartSeries(localPrices, days);
 
         if (fallbackSeries.length > 0) {
-            updateChart(fallbackSeries);
+            updateChart(extendSeriesWithProjection(fallbackSeries));
         } else {
             showError('Chart konnte nicht geladen werden');
         }
@@ -270,6 +272,50 @@ function buildChartUrl(days) {
     return `${baseUrl}/market_chart?vs_currency=${currentChartCurrency}&days=${days}`;
 }
 
+function extendSeriesWithProjection(priceData) {
+    if (!projectionDate) return priceData;
+    if (!Array.isArray(priceData) || priceData.length === 0) return priceData;
+
+    const targetTimestamp = Date.parse(`${projectionDate}T00:00:00Z`);
+    if (!Number.isFinite(targetTimestamp)) return priceData;
+
+    const lastTimestamp = priceData[priceData.length - 1].timestamp;
+    if (!Number.isFinite(lastTimestamp) || targetTimestamp <= lastTimestamp) return priceData;
+
+    const projectionParams = Object.fromEntries(
+        POWER_LAW_SERIES.map((series) => [series.key, getSingleTermPowerLawParams(series.key)])
+    );
+
+    const projected = [...priceData];
+    const dayMs = 24 * 60 * 60 * 1000;
+    for (let ts = lastTimestamp + dayMs; ts <= targetTimestamp; ts += dayMs) {
+        const dateString = new Date(ts).toISOString().slice(0, 10);
+        projected.push({
+            timestamp: ts,
+            price: null,
+            sma50d: null,
+            sma200d: null,
+            sma200w: null,
+            powerLawQ01: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ01),
+            powerLawQ50: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ50),
+            powerLawQ99: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ99),
+            isProjected: true
+        });
+    }
+
+    return projected;
+}
+
+function predictSingleTermPowerLaw(date, params) {
+    const dayNumber = convertToBitcoinDayIndex(date);
+    if (!Number.isFinite(dayNumber) || !params) return null;
+
+    const { a, b } = params;
+    if (![a, b].every(Number.isFinite)) return null;
+
+    return a * Math.pow(Math.max(dayNumber, 1e-9), b);
+}
+
 function updateChart(priceData) {
     const ctx = document.getElementById('btcChart').getContext('2d');
 
@@ -294,7 +340,7 @@ function updateChart(priceData) {
     const powerLawQ99 = priceData.map(point => point.powerLawQ99);
     const chartCurrency = currentChartCurrency.toUpperCase();
     const powerLawFormulas = maVisibility.powerlaw
-        ? buildPowerLawFormulas(priceData)
+        ? buildPowerLawFormulas()
         : [];
 
     // Destroy existing chart
@@ -458,39 +504,60 @@ function updateChart(priceData) {
     });
 }
 
-function buildPowerLawFormulas(priceData) {
+function buildPowerLawFormulas() {
     return POWER_LAW_SERIES.map((series) => {
-        const fit = fitPowerLawCurve(priceData, series.key);
-        if (!fit) return null;
-
-        const coefficientA = Number.isFinite(fit.a) ? fit.a.toExponential(2) : 'n/a';
-        const exponentB = Number.isFinite(fit.b) ? fit.b.toFixed(3) : 'n/a';
-        const coefficientC = Number.isFinite(fit.c) ? fit.c.toExponential(2) : 'n/a';
-        const exponentD = Number.isFinite(fit.d) ? fit.d.toFixed(3) : 'n/a';
+        const params = getSingleTermPowerLawParams(series.key);
+        if (!params) return null;
 
         return {
             color: series.color,
-            text: `${series.label}: P = ${coefficientA} · day^${exponentB} + ${coefficientC} · day^${exponentD}`
+            text: `${series.label}: P = ${params.a.toExponential(2)} · d^${params.b.toFixed(3)}`
         };
     }).filter(Boolean);
 }
 
-function fitPowerLawCurve(priceData, key) {
-    const samples = priceData
-        .map((point) => ({
-            day: point.timestamp,
-            value: point[key]
+function getSingleTermPowerLawParams(seriesKey) {
+    const rowKey = getPowerLawRowKey(seriesKey);
+    const samples = localPriceRows
+        .map((row) => ({
+            day: convertToBitcoinDayIndex(row.date),
+            value: row[rowKey]
         }))
-        .filter((sample) => Number.isFinite(sample.value) && sample.value > 0 && sample.day > 0);
+        .filter((sample) => Number.isFinite(sample.day) && Number.isFinite(sample.value) && sample.value > 0);
 
-    if (samples.length < 4) return null;
+    return fitSingleTermPowerLaw(samples);
+}
 
-    return fitPowerLawQuantileRegression(
-        samples.map((sample) => sample.day),
-        samples.map((sample) => sample.value),
-        0.5,
-        { iterations: 6000, learningRate: 0.03 }
-    );
+function getPowerLawRowKey(seriesKey) {
+    const currencySuffix = currentChartCurrency === 'usd' ? 'Usd' : 'Eur';
+    const seriesSuffix = seriesKey.replace('powerLaw', '');
+    return `powerLaw${seriesSuffix}${currencySuffix}`;
+}
+
+function fitSingleTermPowerLaw(samples) {
+    if (!Array.isArray(samples) || samples.length < 4) return null;
+
+    const transformed = samples
+        .map(({ day, value }) => ({
+            logX: Math.log(Math.max(day, 1e-9)),
+            logY: Math.log(Math.max(value, 1e-9))
+        }))
+        .filter(({ logX, logY }) => Number.isFinite(logX) && Number.isFinite(logY));
+
+    if (transformed.length < 4) return null;
+
+    const meanX = transformed.reduce((sum, p) => sum + p.logX, 0) / transformed.length;
+    const meanY = transformed.reduce((sum, p) => sum + p.logY, 0) / transformed.length;
+    const covariance = transformed.reduce((sum, p) => sum + ((p.logX - meanX) * (p.logY - meanY)), 0);
+    const variance = transformed.reduce((sum, p) => sum + ((p.logX - meanX) ** 2), 0);
+
+    if (variance === 0) return null;
+
+    const b = covariance / variance;
+    const logA = meanY - (b * meanX);
+    const a = Math.exp(logA);
+
+    return Number.isFinite(a) && Number.isFinite(b) ? { a, b } : null;
 }
 
 function setupChartControls() {
@@ -498,6 +565,19 @@ function setupChartControls() {
     const scaleButtons = document.querySelectorAll('.chart-btn[data-scale]');
     const currencyButtons = document.querySelectorAll('.chart-btn[data-currency]');
     const maButtons = document.querySelectorAll('.ma-btn[data-ma]');
+    const futureDateInput = document.getElementById('futureDate');
+
+    if (futureDateInput) {
+        const today = new Date().toISOString().slice(0, 10);
+        futureDateInput.min = today;
+        futureDateInput.value = today;
+        projectionDate = today;
+
+        futureDateInput.addEventListener('change', async () => {
+            projectionDate = futureDateInput.value || today;
+            await loadChartData(currentChartDays);
+        });
+    }
 
     timeframeButtons.forEach(button => {
         button.addEventListener('click', async () => {
