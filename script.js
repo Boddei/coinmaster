@@ -463,12 +463,14 @@ function buildPowerLawFormulas(priceData) {
         const fit = fitPowerLawCurve(priceData, series.key);
         if (!fit) return null;
 
-        const coefficient = Number.isFinite(fit.coefficient) ? fit.coefficient.toExponential(2) : 'n/a';
-        const exponent = Number.isFinite(fit.exponent) ? fit.exponent.toFixed(3) : 'n/a';
+        const coefficient = Number.isFinite(fit.a) ? fit.a.toExponential(2) : 'n/a';
+        const shift = Number.isFinite(fit.b) ? fit.b.toFixed(1) : 'n/a';
+        const exponent = Number.isFinite(fit.c) ? fit.c.toFixed(3) : 'n/a';
+        const offset = Number.isFinite(fit.d) ? fit.d.toFixed(2) : 'n/a';
 
         return {
             color: series.color,
-            text: `${series.label}: P = ${coefficient} · d^${exponent}`
+            text: `${series.label}: P = ${coefficient} · (d - ${shift})^${exponent} + ${offset}`
         };
     }).filter(Boolean);
 }
@@ -481,34 +483,14 @@ function fitPowerLawCurve(priceData, key) {
         }))
         .filter((sample) => Number.isFinite(sample.value) && sample.value > 0 && sample.day > 0);
 
-    if (samples.length < 2) return null;
+    if (samples.length < 4) return null;
 
-    const transformed = samples.map((sample) => ({
-        x: Math.log(sample.day),
-        y: Math.log(sample.value)
-    }));
-
-    const n = transformed.length;
-    const meanX = transformed.reduce((sum, point) => sum + point.x, 0) / n;
-    const meanY = transformed.reduce((sum, point) => sum + point.y, 0) / n;
-
-    let numerator = 0;
-    let denominator = 0;
-
-    transformed.forEach((point) => {
-        numerator += (point.x - meanX) * (point.y - meanY);
-        denominator += (point.x - meanX) ** 2;
-    });
-
-    if (denominator === 0) return null;
-
-    const exponent = numerator / denominator;
-    const intercept = meanY - (exponent * meanX);
-
-    return {
-        coefficient: Math.exp(intercept),
-        exponent
-    };
+    return fitPowerLawQuantileRegression(
+        samples.map((sample) => sample.day),
+        samples.map((sample) => sample.value),
+        0.5,
+        { iterations: 6000, learningRate: 0.03 }
+    );
 }
 
 function setupChartControls() {
@@ -661,12 +643,12 @@ function attachCalculatedMovingAverages(rows) {
     const dateSeries = sorted.map((row) => row.date);
     const eurSeries = sorted.map((row) => row.closeEur);
     const usdSeries = sorted.map((row) => row.closeUsd);
-    const eurQ01 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.01);
-    const eurQ50 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.5);
-    const eurQ99 = fitLogLogQuantileRegression(dateSeries, eurSeries, 0.99);
-    const usdQ01 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.01);
-    const usdQ50 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.5);
-    const usdQ99 = fitLogLogQuantileRegression(dateSeries, usdSeries, 0.99);
+    const eurQ01 = fitPowerLawQuantileRegression(dateSeries, eurSeries, 0.01);
+    const eurQ50 = fitPowerLawQuantileRegression(dateSeries, eurSeries, 0.5);
+    const eurQ99 = fitPowerLawQuantileRegression(dateSeries, eurSeries, 0.99);
+    const usdQ01 = fitPowerLawQuantileRegression(dateSeries, usdSeries, 0.01);
+    const usdQ50 = fitPowerLawQuantileRegression(dateSeries, usdSeries, 0.5);
+    const usdQ99 = fitPowerLawQuantileRegression(dateSeries, usdSeries, 0.99);
 
     return sorted.map((row, index) => {
         eurSum50 += row.closeEur;
@@ -697,84 +679,146 @@ function attachCalculatedMovingAverages(rows) {
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
             sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null),
-            powerLawQ01Eur: row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01.alpha, eurQ01.beta),
-            powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50.alpha, eurQ50.beta),
-            powerLawQ99Eur: row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99.alpha, eurQ99.beta),
-            powerLawQ01Usd: row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01.alpha, usdQ01.beta),
-            powerLawQ50Usd: row.powerLawQ50Usd ?? predictPowerLaw(row.date, usdQ50.alpha, usdQ50.beta),
-            powerLawQ99Usd: row.powerLawQ99Usd ?? predictPowerLaw(row.date, usdQ99.alpha, usdQ99.beta)
+            powerLawQ01Eur: row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01),
+            powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50),
+            powerLawQ99Eur: row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99),
+            powerLawQ01Usd: row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01),
+            powerLawQ50Usd: row.powerLawQ50Usd ?? predictPowerLaw(row.date, usdQ50),
+            powerLawQ99Usd: row.powerLawQ99Usd ?? predictPowerLaw(row.date, usdQ99)
         };
     });
 }
 
-function fitLogLogQuantileRegression(dates, prices, tau, options = {}) {
+function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
     const {
-        iterations = 12000,
+        iterations = 8000,
         learningRate = 0.02,
         epsilon = 1e-9
     } = options;
 
-    const samples = dates.map((date, index) => {
-        const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
-        const price = prices[index];
+    const rawSamples = dates.map((date, index) => {
+        const day = typeof date === 'number'
+            ? Math.floor(date)
+            : Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
         return {
-            logX: Math.log(Math.max(dayNumber, 1)),
-            logY: Math.log(Math.max(price, epsilon))
+            day,
+            value: Number(prices[index])
         };
     });
 
-    const n = samples.length;
-    const meanX = samples.reduce((acc, point) => acc + point.logX, 0) / n;
-    const meanY = samples.reduce((acc, point) => acc + point.logY, 0) / n;
-    const covariance = samples.reduce((acc, point) => acc + ((point.logX - meanX) * (point.logY - meanY)), 0);
-    const varianceX = samples.reduce((acc, point) => acc + ((point.logX - meanX) ** 2), 0);
-
-    let beta = varianceX === 0 ? 0 : covariance / varianceX;
-    let alpha = meanY - (beta * meanX);
-
-    let mAlpha = 0;
-    let mBeta = 0;
-    let vAlpha = 0;
-    let vBeta = 0;
-    const beta1 = 0.9;
-    const beta2 = 0.999;
-
-    for (let step = 1; step <= iterations; step += 1) {
-        let gradAlpha = 0;
-        let gradBeta = 0;
-
-        for (const sample of samples) {
-            const prediction = alpha + (beta * sample.logX);
-            const residual = sample.logY - prediction;
-            const psi = residual >= 0 ? tau : tau - 1;
-
-            gradAlpha -= psi;
-            gradBeta -= psi * sample.logX;
-        }
-
-        gradAlpha /= n;
-        gradBeta /= n;
-
-        mAlpha = (beta1 * mAlpha) + ((1 - beta1) * gradAlpha);
-        mBeta = (beta1 * mBeta) + ((1 - beta1) * gradBeta);
-        vAlpha = (beta2 * vAlpha) + ((1 - beta2) * gradAlpha * gradAlpha);
-        vBeta = (beta2 * vBeta) + ((1 - beta2) * gradBeta * gradBeta);
-
-        const mAlphaHat = mAlpha / (1 - (beta1 ** step));
-        const mBetaHat = mBeta / (1 - (beta1 ** step));
-        const vAlphaHat = vAlpha / (1 - (beta2 ** step));
-        const vBetaHat = vBeta / (1 - (beta2 ** step));
-
-        alpha -= learningRate * (mAlphaHat / (Math.sqrt(vAlphaHat) + epsilon));
-        beta -= learningRate * (mBetaHat / (Math.sqrt(vBetaHat) + epsilon));
+    const samples = rawSamples.filter((sample) => Number.isFinite(sample.day) && Number.isFinite(sample.value));
+    if (samples.length < 4) {
+        return { a: NaN, b: NaN, c: NaN, d: NaN };
     }
 
-    return { alpha, beta };
+    const dayValues = samples.map((sample) => sample.day);
+    const priceValues = samples.map((sample) => sample.value);
+    const minDay = Math.min(...dayValues);
+    const minPrice = Math.min(...priceValues);
+    const maxPrice = Math.max(...priceValues);
+
+    const shiftedDays = dayValues.map((day) => Math.max(day - minDay + 1, epsilon));
+    const logXMean = shiftedDays.reduce((sum, day) => sum + Math.log(day), 0) / shiftedDays.length;
+    const logYMean = priceValues.reduce((sum, price) => sum + Math.log(Math.max(price, epsilon)), 0) / priceValues.length;
+    const logCovariance = shiftedDays.reduce((sum, day, index) => {
+        return sum + ((Math.log(day) - logXMean) * (Math.log(Math.max(priceValues[index], epsilon)) - logYMean));
+    }, 0);
+    const logVariance = shiftedDays.reduce((sum, day) => sum + ((Math.log(day) - logXMean) ** 2), 0);
+
+    let c = logVariance === 0 ? 1 : logCovariance / logVariance;
+    let a = Math.exp(logYMean - (c * logXMean));
+    let b = minDay - 1;
+    let d = Math.max(0, minPrice * 0.01);
+
+    let mA = 0;
+    let mB = 0;
+    let mC = 0;
+    let mD = 0;
+    let vA = 0;
+    let vB = 0;
+    let vC = 0;
+    let vD = 0;
+    const beta1 = 0.9;
+    const beta2 = 0.999;
+    const maxShift = minDay - epsilon;
+
+    for (let step = 1; step <= iterations; step += 1) {
+        let gradA = 0;
+        let gradB = 0;
+        let gradC = 0;
+        let gradD = 0;
+
+        for (const sample of samples) {
+            const base = Math.max(sample.day - b, epsilon);
+            const powBase = Math.pow(base, c);
+            const prediction = (a * powBase) + d;
+            const residual = sample.value - prediction;
+            const psi = residual >= 0 ? tau : tau - 1;
+            const dLossDPrediction = -psi;
+
+            gradA += dLossDPrediction * powBase;
+            gradD += dLossDPrediction;
+            gradC += dLossDPrediction * a * powBase * Math.log(base);
+
+            if (sample.day - b > epsilon) {
+                gradB += dLossDPrediction * (-a * c * Math.pow(base, c - 1));
+            }
+        }
+
+        const n = samples.length;
+        gradA /= n;
+        gradB /= n;
+        gradC /= n;
+        gradD /= n;
+
+        mA = (beta1 * mA) + ((1 - beta1) * gradA);
+        mB = (beta1 * mB) + ((1 - beta1) * gradB);
+        mC = (beta1 * mC) + ((1 - beta1) * gradC);
+        mD = (beta1 * mD) + ((1 - beta1) * gradD);
+
+        vA = (beta2 * vA) + ((1 - beta2) * gradA * gradA);
+        vB = (beta2 * vB) + ((1 - beta2) * gradB * gradB);
+        vC = (beta2 * vC) + ((1 - beta2) * gradC * gradC);
+        vD = (beta2 * vD) + ((1 - beta2) * gradD * gradD);
+
+        const mAHat = mA / (1 - (beta1 ** step));
+        const mBHat = mB / (1 - (beta1 ** step));
+        const mCHat = mC / (1 - (beta1 ** step));
+        const mDHat = mD / (1 - (beta1 ** step));
+
+        const vAHat = vA / (1 - (beta2 ** step));
+        const vBHat = vB / (1 - (beta2 ** step));
+        const vCHat = vC / (1 - (beta2 ** step));
+        const vDHat = vD / (1 - (beta2 ** step));
+
+        a -= learningRate * (mAHat / (Math.sqrt(vAHat) + epsilon));
+        b -= learningRate * (mBHat / (Math.sqrt(vBHat) + epsilon));
+        c -= learningRate * (mCHat / (Math.sqrt(vCHat) + epsilon));
+        d -= learningRate * (mDHat / (Math.sqrt(vDHat) + epsilon));
+
+        if (b >= maxShift) b = maxShift;
+        if (!Number.isFinite(a)) a = epsilon;
+        if (!Number.isFinite(c)) c = 1;
+        if (!Number.isFinite(d)) d = minPrice;
+
+        a = Math.max(a, epsilon);
+        c = Math.min(Math.max(c, 0.05), 15);
+        d = Math.min(Math.max(d, minPrice - ((maxPrice - minPrice) * 0.5)), maxPrice * 2);
+    }
+
+    return { a, b, c, d };
 }
 
-function predictPowerLaw(date, alpha, beta) {
-    const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
-    return Math.exp(alpha + (beta * Math.log(Math.max(dayNumber, 1))));
+function predictPowerLaw(date, params) {
+    const dayNumber = typeof date === 'number'
+        ? Math.floor(date)
+        : Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+
+    const { a, b, c, d } = params || {};
+    if (![a, b, c, d].every(Number.isFinite)) return null;
+
+    const base = Math.max(dayNumber - b, 1e-9);
+    return (a * Math.pow(base, c)) + d;
 }
 
 async function getLatestLocalClose() {
