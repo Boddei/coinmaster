@@ -955,11 +955,10 @@ async function calculate200WMA() {
         document.getElementById('wma200').innerHTML = formatCurrency(current200WmaUsd, 'USD');
         document.getElementById('wma200Distance').textContent = `${currentRatioPercent.toFixed(1)}%`;
         document.getElementById('wma200UnderRatio').textContent =
-            `${belowSharePercent.toFixed(1)}% der Tage darunter`;
+            `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
         const interpretation = document.getElementById('wma200Interpretation');
-        interpretation.textContent =
-            `Der Kurs stand ${belowSharePercent.toFixed(1)}% aller Tage unter ${currentRatioPercent.toFixed(1)}% des damaligen 200WMA – Bitcoin ist damit günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit (Modellbasis USD).`;
+        interpretation.textContent = '';
         interpretation.className = 'indicator-interpretation interpretation-neutral';
 
     } catch (error) {
@@ -972,27 +971,54 @@ async function calculate200WMA() {
 }
 
 function calculatePowerLaw() {
-    // Power Law Model: Price = 10^(-17.01) * (days since genesis)^5.82
-    // Genesis: 2009-01-03
-    const genesisDate = new Date('2009-01-03');
-    const today = new Date();
-    const daysSinceGenesis = Math.floor((today - genesisDate) / (1000 * 60 * 60 * 24));
-    
-    // Calculate power law price (in USD, we'll approximate EUR)
-    const powerLawPriceUSD = Math.pow(10, -17.01) * Math.pow(daysSinceGenesis, 5.82);
-    const powerLawPriceEUR = powerLawPriceUSD * 0.92; // Approximate conversion
-    
-    // Get current price (we'll use a stored value from previous API call)
-    // For now, we'll show the model price
-    document.getElementById('powerLaw').innerHTML = 
-        `<div style="font-size: 1rem; color: #a0a0a0;">Tage seit Genesis: ${daysSinceGenesis.toLocaleString('de-DE')}</div>`;
-    document.getElementById('powerLawFair').textContent = 
-        formatCurrency(powerLawPriceEUR, 'EUR');
-    
-    // Interpretation
-    const interpretation = document.getElementById('powerLawInterpretation');
-    interpretation.textContent = '📈 Langfristiges Wachstumsmodell';
-    interpretation.className = 'indicator-interpretation interpretation-neutral';
+    try {
+        const modelRows = localPriceRows
+            .filter((row) => (
+                Number.isFinite(row.closeUsd)
+                && Number.isFinite(row.powerLawQ01Usd)
+                && Number.isFinite(row.powerLawQ99Usd)
+                && row.powerLawQ99Usd > row.powerLawQ01Usd
+            ))
+            .sort((a, b) => a.date.localeCompare(b.date));
+
+        if (modelRows.length === 0) throw new Error('Keine Power-Law-Modelldaten verfügbar');
+
+        const latestRow = modelRows[modelRows.length - 1];
+        const currentPriceUsd = latestRow.closeUsd;
+        const q01 = latestRow.powerLawQ01Usd;
+        const q50 = latestRow.powerLawQ50Usd;
+        const q99 = latestRow.powerLawQ99Usd;
+        const currentIndexPercent = Math.max(0, Math.min(100, ((currentPriceUsd - q01) / (q99 - q01)) * 100));
+
+        const indexSeries = modelRows
+            .map((row) => ((row.closeUsd - row.powerLawQ01Usd) / (row.powerLawQ99Usd - row.powerLawQ01Usd)) * 100)
+            .filter(Number.isFinite)
+            .map((value) => Math.max(0, Math.min(100, value)));
+
+        const daysBelowCurrentIndex = indexSeries.filter((value) => value < currentIndexPercent).length;
+        const belowSharePercent = (daysBelowCurrentIndex / indexSeries.length) * 100;
+        const cheaperThanPercent = 100 - belowSharePercent;
+
+        document.getElementById('powerLaw').innerHTML =
+            `<div style="font-size: 1rem; color: #a0a0a0;">Index (0% = untere Linie, 100% = obere Linie): ${currentIndexPercent.toFixed(1)}%</div>`;
+        document.getElementById('powerLawQ01').textContent = formatCurrency(q01, 'USD');
+        document.getElementById('powerLawQ50').textContent = Number.isFinite(q50) ? formatCurrency(q50, 'USD') : '-';
+        document.getElementById('powerLawQ99').textContent = formatCurrency(q99, 'USD');
+        document.getElementById('powerLawPercentile').textContent =
+            `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
+
+        const interpretation = document.getElementById('powerLawInterpretation');
+        interpretation.textContent = '';
+        interpretation.className = 'indicator-interpretation interpretation-neutral';
+    } catch (error) {
+        console.error('Fehler bei Power-Law-Berechnung:', error);
+        document.getElementById('powerLaw').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+        document.getElementById('powerLawQ01').textContent = '-';
+        document.getElementById('powerLawQ50').textContent = '-';
+        document.getElementById('powerLawQ99').textContent = '-';
+        document.getElementById('powerLawPercentile').textContent = '-';
+        document.getElementById('powerLawInterpretation').textContent = '';
+    }
 }
 
 function calculateStockToFlow() {
