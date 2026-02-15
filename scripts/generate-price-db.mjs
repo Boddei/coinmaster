@@ -1,9 +1,17 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 
 const START_DATE = '2010-01-01';
+const POWERLAW_START_DATE = '2010-07-18';
 const END_DATE = new Date().toISOString().slice(0, 10);
 const COIN = 'bitcoin';
 const API_BASE = 'https://api.coingecko.com/api/v3';
+const GENESIS_DATE = '2009-01-03';
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
+const POWERLAW_SEEDS = {
+  0.01: { alpha10: -17.2, beta: 5.775 },
+  0.5: { alpha10: -15.78, beta: 5.47 },
+  0.99: { alpha10: -13.905, beta: 5.165 }
+};
 
 function toUnix(dateStr) {
   return Math.floor(new Date(`${dateStr}T00:00:00Z`).getTime() / 1000);
@@ -11,6 +19,11 @@ function toUnix(dateStr) {
 
 function isoDate(ms) {
   return new Date(ms).toISOString().slice(0, 10);
+}
+
+function daySinceGenesis(date) {
+  const dayNumber = Math.floor((new Date(`${date}T00:00:00Z`).getTime() - new Date(`${GENESIS_DATE}T00:00:00Z`).getTime()) / MS_PER_DAY) + 1;
+  return Math.max(dayNumber, 1);
 }
 
 async function fetchRange(vsCurrency) {
@@ -63,7 +76,7 @@ function fitLogLogQuantileRegression(dates, prices, tau, options = {}) {
   } = options;
 
   const samples = dates.map((date, index) => {
-    const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+    const dayNumber = daySinceGenesis(date);
     const price = prices[index];
     return {
       logX: Math.log(Math.max(dayNumber, 1)),
@@ -77,8 +90,14 @@ function fitLogLogQuantileRegression(dates, prices, tau, options = {}) {
   const covariance = samples.reduce((acc, point) => acc + ((point.logX - meanX) * (point.logY - meanY)), 0);
   const varianceX = samples.reduce((acc, point) => acc + ((point.logX - meanX) ** 2), 0);
 
+  const seed = POWERLAW_SEEDS[tau];
   let beta = varianceX === 0 ? 0 : covariance / varianceX;
   let alpha = meanY - (beta * meanX);
+
+  if (seed) {
+    alpha = seed.alpha10 * Math.log(10);
+    beta = seed.beta;
+  }
 
   let mAlpha = 0;
   let mBeta = 0;
@@ -117,11 +136,17 @@ function fitLogLogQuantileRegression(dates, prices, tau, options = {}) {
     beta -= learningRate * (mBetaHat / (Math.sqrt(vBetaHat) + epsilon));
   }
 
-  return { alpha, beta };
+  const predictedLogs = samples.map((sample) => alpha + (beta * sample.logX));
+  const residuals = samples.map((sample, index) => sample.logY - predictedLogs[index]);
+  const sortedResiduals = [...residuals].sort((a, b) => a - b);
+  const quantileIndex = Math.min(Math.max(Math.ceil(tau * sortedResiduals.length) - 1, 0), sortedResiduals.length - 1);
+  const interceptShift = sortedResiduals[quantileIndex];
+
+  return { alpha: alpha + interceptShift, beta };
 }
 
 function predictPowerLaw(date, alpha, beta) {
-  const dayNumber = Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+  const dayNumber = daySinceGenesis(date);
   return Math.exp(alpha + (beta * Math.log(Math.max(dayNumber, 1))));
 }
 
@@ -147,12 +172,15 @@ async function main() {
   const sma50Usd = rollingAverage(usdSeries, 50);
   const sma200Usd = rollingAverage(usdSeries, 200);
   const sma1400Usd = rollingAverage(usdSeries, 1400);
-  const q01 = fitLogLogQuantileRegression(validDates, eurSeries, 0.01);
-  const q01Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.01);
-  const q50 = fitLogLogQuantileRegression(validDates, eurSeries, 0.5);
-  const q50Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.5);
-  const q99 = fitLogLogQuantileRegression(validDates, eurSeries, 0.99);
-  const q99Usd = fitLogLogQuantileRegression(validDates, usdSeries, 0.99);
+  const fitDates = validDates.filter((date) => date >= POWERLAW_START_DATE);
+  const fitEurSeries = fitDates.map((date) => eurDaily.get(date));
+  const fitUsdSeries = fitDates.map((date) => usdDaily.get(date));
+  const q01 = fitLogLogQuantileRegression(fitDates, fitEurSeries, 0.01);
+  const q01Usd = fitLogLogQuantileRegression(fitDates, fitUsdSeries, 0.01);
+  const q50 = fitLogLogQuantileRegression(fitDates, fitEurSeries, 0.5);
+  const q50Usd = fitLogLogQuantileRegression(fitDates, fitUsdSeries, 0.5);
+  const q99 = fitLogLogQuantileRegression(fitDates, fitEurSeries, 0.99);
+  const q99Usd = fitLogLogQuantileRegression(fitDates, fitUsdSeries, 0.99);
   let validIndex = 0;
 
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
