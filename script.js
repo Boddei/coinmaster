@@ -463,14 +463,14 @@ function buildPowerLawFormulas(priceData) {
         const fit = fitPowerLawCurve(priceData, series.key);
         if (!fit) return null;
 
-        const coefficient = Number.isFinite(fit.a) ? fit.a.toExponential(2) : 'n/a';
-        const shift = Number.isFinite(fit.b) ? fit.b.toFixed(1) : 'n/a';
-        const exponent = Number.isFinite(fit.c) ? fit.c.toFixed(3) : 'n/a';
-        const offset = Number.isFinite(fit.d) ? fit.d.toFixed(2) : 'n/a';
+        const coefficientA = Number.isFinite(fit.a) ? fit.a.toExponential(2) : 'n/a';
+        const exponentB = Number.isFinite(fit.b) ? fit.b.toFixed(3) : 'n/a';
+        const coefficientC = Number.isFinite(fit.c) ? fit.c.toExponential(2) : 'n/a';
+        const exponentD = Number.isFinite(fit.d) ? fit.d.toFixed(3) : 'n/a';
 
         return {
             color: series.color,
-            text: `${series.label}: P = ${coefficient} · (d - ${shift})^${exponent} + ${offset}`
+            text: `${series.label}: P = ${coefficientA} · day^${exponentB} + ${coefficientC} · day^${exponentD}`
         };
     }).filter(Boolean);
 }
@@ -478,7 +478,7 @@ function buildPowerLawFormulas(priceData) {
 function fitPowerLawCurve(priceData, key) {
     const samples = priceData
         .map((point) => ({
-            day: Math.floor(point.timestamp / (1000 * 60 * 60 * 24)),
+            day: point.timestamp,
             value: point[key]
         }))
         .filter((sample) => Number.isFinite(sample.value) && sample.value > 0 && sample.day > 0);
@@ -697,9 +697,7 @@ function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
     } = options;
 
     const rawSamples = dates.map((date, index) => {
-        const day = typeof date === 'number'
-            ? Math.floor(date)
-            : Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+        const day = convertToBitcoinDayIndex(date);
         return {
             day,
             value: Number(prices[index])
@@ -711,24 +709,23 @@ function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
         return { a: NaN, b: NaN, c: NaN, d: NaN };
     }
 
-    const dayValues = samples.map((sample) => sample.day);
     const priceValues = samples.map((sample) => sample.value);
-    const minDay = Math.min(...dayValues);
     const minPrice = Math.min(...priceValues);
     const maxPrice = Math.max(...priceValues);
 
-    const shiftedDays = dayValues.map((day) => Math.max(day - minDay + 1, epsilon));
-    const logXMean = shiftedDays.reduce((sum, day) => sum + Math.log(day), 0) / shiftedDays.length;
+    const dayValues = samples.map((sample) => Math.max(sample.day, epsilon));
+    const logXMean = dayValues.reduce((sum, day) => sum + Math.log(day), 0) / dayValues.length;
     const logYMean = priceValues.reduce((sum, price) => sum + Math.log(Math.max(price, epsilon)), 0) / priceValues.length;
-    const logCovariance = shiftedDays.reduce((sum, day, index) => {
+    const logCovariance = dayValues.reduce((sum, day, index) => {
         return sum + ((Math.log(day) - logXMean) * (Math.log(Math.max(priceValues[index], epsilon)) - logYMean));
     }, 0);
-    const logVariance = shiftedDays.reduce((sum, day) => sum + ((Math.log(day) - logXMean) ** 2), 0);
+    const logVariance = dayValues.reduce((sum, day) => sum + ((Math.log(day) - logXMean) ** 2), 0);
 
-    let c = logVariance === 0 ? 1 : logCovariance / logVariance;
-    let a = Math.exp(logYMean - (c * logXMean));
-    let b = minDay - 1;
-    let d = Math.max(0, minPrice * 0.01);
+    const dominantExponent = logVariance === 0 ? 1 : Math.max(logCovariance / logVariance, 0.05);
+    let a = Math.max(Math.exp(logYMean - (dominantExponent * logXMean)) * 0.35, epsilon);
+    let b = Math.max(dominantExponent * 0.65, 0.05);
+    let c = Math.max(Math.exp(logYMean - (dominantExponent * logXMean)) * 0.65, epsilon);
+    let d = Math.min(Math.max(dominantExponent * 1.35, 0.05), 12);
 
     let mA = 0;
     let mB = 0;
@@ -740,7 +737,6 @@ function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
     let vD = 0;
     const beta1 = 0.9;
     const beta2 = 0.999;
-    const maxShift = minDay - epsilon;
 
     for (let step = 1; step <= iterations; step += 1) {
         let gradA = 0;
@@ -749,20 +745,18 @@ function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
         let gradD = 0;
 
         for (const sample of samples) {
-            const base = Math.max(sample.day - b, epsilon);
-            const powBase = Math.pow(base, c);
-            const prediction = (a * powBase) + d;
+            const dayBase = Math.max(sample.day, epsilon);
+            const firstComponent = Math.pow(dayBase, b);
+            const secondComponent = Math.pow(dayBase, d);
+            const prediction = (a * firstComponent) + (c * secondComponent);
             const residual = sample.value - prediction;
             const psi = residual >= 0 ? tau : tau - 1;
             const dLossDPrediction = -psi;
 
-            gradA += dLossDPrediction * powBase;
-            gradD += dLossDPrediction;
-            gradC += dLossDPrediction * a * powBase * Math.log(base);
-
-            if (sample.day - b > epsilon) {
-                gradB += dLossDPrediction * (-a * c * Math.pow(base, c - 1));
-            }
+            gradA += dLossDPrediction * firstComponent;
+            gradB += dLossDPrediction * a * firstComponent * Math.log(dayBase);
+            gradC += dLossDPrediction * secondComponent;
+            gradD += dLossDPrediction * c * secondComponent * Math.log(dayBase);
         }
 
         const n = samples.length;
@@ -796,29 +790,44 @@ function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
         c -= learningRate * (mCHat / (Math.sqrt(vCHat) + epsilon));
         d -= learningRate * (mDHat / (Math.sqrt(vDHat) + epsilon));
 
-        if (b >= maxShift) b = maxShift;
-        if (!Number.isFinite(a)) a = epsilon;
-        if (!Number.isFinite(c)) c = 1;
-        if (!Number.isFinite(d)) d = minPrice;
+        if (!Number.isFinite(a)) a = minPrice * 0.1;
+        if (!Number.isFinite(b)) b = 1;
+        if (!Number.isFinite(c)) c = minPrice * 0.1;
+        if (!Number.isFinite(d)) d = 2;
 
-        a = Math.max(a, epsilon);
-        c = Math.min(Math.max(c, 0.05), 15);
-        d = Math.min(Math.max(d, minPrice - ((maxPrice - minPrice) * 0.5)), maxPrice * 2);
+        a = Math.min(Math.max(a, epsilon), maxPrice * 10);
+        c = Math.min(Math.max(c, epsilon), maxPrice * 10);
+        b = Math.min(Math.max(b, 0.01), 12);
+        d = Math.min(Math.max(d, 0.01), 12);
+    }
+
+    if (b > d) {
+        [a, c] = [c, a];
+        [b, d] = [d, b];
     }
 
     return { a, b, c, d };
 }
 
 function predictPowerLaw(date, params) {
-    const dayNumber = typeof date === 'number'
-        ? Math.floor(date)
-        : Math.floor(new Date(`${date}T00:00:00Z`).getTime() / (1000 * 60 * 60 * 24));
+    const dayNumber = convertToBitcoinDayIndex(date);
 
     const { a, b, c, d } = params || {};
     if (![a, b, c, d].every(Number.isFinite)) return null;
 
-    const base = Math.max(dayNumber - b, 1e-9);
-    return (a * Math.pow(base, c)) + d;
+    const base = Math.max(dayNumber, 1e-9);
+    return (a * Math.pow(base, b)) + (c * Math.pow(base, d));
+}
+
+function convertToBitcoinDayIndex(input) {
+    const BITCOIN_GENESIS_DAY_MS = Date.parse('2009-01-03T00:00:00Z');
+    const value = typeof input === 'number'
+        ? input
+        : Date.parse(`${input}T00:00:00Z`);
+
+    if (!Number.isFinite(value)) return NaN;
+    const timestamp = value > 1e11 ? value : value * 24 * 60 * 60 * 1000;
+    return Math.max(Math.floor((timestamp - BITCOIN_GENESIS_DAY_MS) / (1000 * 60 * 60 * 24)) + 1, 1);
 }
 
 async function getLatestLocalClose() {
