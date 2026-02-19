@@ -724,43 +724,41 @@ async function fetchLocalCsvPrices() {
         const csv = await response.text();
         const lines = csv.trim().split('\n');
         const rows = [];
+        const header = lines[0].split(',');
+        const columnIndex = new Map(header.map((name, index) => [name, index]));
+        const readColumn = (columns, name) => {
+            const index = columnIndex.get(name);
+            if (!Number.isInteger(index)) return undefined;
+            return columns[index];
+        };
 
         for (let i = 1; i < lines.length; i += 1) {
-            const [
-                date,
-                closeEur,
-                closeUsd,
-                sma50dEur,
-                sma200dEur,
-                sma200wEur,
-                sma50dUsd,
-                sma200dUsd,
-                sma200wUsd,
-                powerLawQ01Eur,
-                powerLawQ50Eur,
-                powerLawQ99Eur,
-                powerLawQ01Usd,
-                powerLawQ50Usd,
-                powerLawQ99Usd
-            ] = lines[i].split(',');
+            const columns = lines[i].split(',');
+            const date = readColumn(columns, 'date');
+            const closeEur = readColumn(columns, 'close_eur');
+            const closeUsd = readColumn(columns, 'close_usd');
             if (!date || !closeEur || !closeUsd) continue;
 
             rows.push({
                 date,
                 closeEur: Number(closeEur),
                 closeUsd: Number(closeUsd),
-                sma50dEur: toNullableNumber(sma50dEur),
-                sma200dEur: toNullableNumber(sma200dEur),
-                sma200wEur: toNullableNumber(sma200wEur),
-                sma50dUsd: toNullableNumber(sma50dUsd),
-                sma200dUsd: toNullableNumber(sma200dUsd),
-                sma200wUsd: toNullableNumber(sma200wUsd),
-                powerLawQ01Eur: toNullableNumber(powerLawQ01Eur),
-                powerLawQ50Eur: toNullableNumber(powerLawQ50Eur),
-                powerLawQ99Eur: toNullableNumber(powerLawQ99Eur),
-                powerLawQ01Usd: toNullableNumber(powerLawQ01Usd),
-                powerLawQ50Usd: toNullableNumber(powerLawQ50Usd),
-                powerLawQ99Usd: toNullableNumber(powerLawQ99Usd)
+                sma50dEur: toNullableNumber(readColumn(columns, 'sma50d_eur')),
+                sma200dEur: toNullableNumber(readColumn(columns, 'sma200d_eur')),
+                sma200wEur: toNullableNumber(readColumn(columns, 'sma200w_eur')),
+                sma200wFactorEur: toNullableNumber(readColumn(columns, 'sma200w_factor_eur')),
+                sma50dUsd: toNullableNumber(readColumn(columns, 'sma50d_usd')),
+                sma200dUsd: toNullableNumber(readColumn(columns, 'sma200d_usd')),
+                sma200wUsd: toNullableNumber(readColumn(columns, 'sma200w_usd')),
+                sma200wFactorUsd: toNullableNumber(readColumn(columns, 'sma200w_factor_usd')),
+                powerLawQ01Eur: toNullableNumber(readColumn(columns, 'powerlaw_q01_eur')),
+                powerLawQ50Eur: toNullableNumber(readColumn(columns, 'powerlaw_q50_eur')),
+                powerLawQ99Eur: toNullableNumber(readColumn(columns, 'powerlaw_q99_eur')),
+                powerLawFactorEur: toNullableNumber(readColumn(columns, 'powerlaw_factor_eur')),
+                powerLawQ01Usd: toNullableNumber(readColumn(columns, 'powerlaw_q01_usd')),
+                powerLawQ50Usd: toNullableNumber(readColumn(columns, 'powerlaw_q50_usd')),
+                powerLawQ99Usd: toNullableNumber(readColumn(columns, 'powerlaw_q99_usd')),
+                powerLawFactorUsd: toNullableNumber(readColumn(columns, 'powerlaw_factor_usd'))
             });
         }
 
@@ -815,20 +813,31 @@ function attachCalculatedMovingAverages(rows) {
             usdSum1400 -= sorted[index - usdWindow.sma200wUsd].closeUsd;
         }
 
+        const sma200wEur = row.sma200wEur ?? (index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null);
+        const sma200wUsd = row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null);
+        const powerLawQ01Eur = row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01);
+        const powerLawQ99Eur = row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99);
+        const powerLawQ01Usd = row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01);
+        const powerLawQ99Usd = row.powerLawQ99Usd ?? predictPowerLaw(row.date, usdQ99);
+
         return {
             ...row,
             sma50dEur: row.sma50dEur ?? (index >= eurWindow.sma50dEur - 1 ? eurSum50 / eurWindow.sma50dEur : null),
             sma200dEur: row.sma200dEur ?? (index >= eurWindow.sma200dEur - 1 ? eurSum200 / eurWindow.sma200dEur : null),
-            sma200wEur: row.sma200wEur ?? (index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null),
+            sma200wEur,
+            sma200wFactorEur: row.sma200wFactorEur ?? (Number.isFinite(sma200wEur) && sma200wEur !== 0 ? row.closeEur / sma200wEur : null),
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
-            sma200wUsd: row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null),
-            powerLawQ01Eur: row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01),
+            sma200wUsd,
+            sma200wFactorUsd: row.sma200wFactorUsd ?? (Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeEur / sma200wUsd : null),
+            powerLawQ01Eur,
             powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50),
-            powerLawQ99Eur: row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99),
-            powerLawQ01Usd: row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01),
+            powerLawQ99Eur,
+            powerLawFactorEur: row.powerLawFactorEur ?? (Number.isFinite(powerLawQ99Eur) && Number.isFinite(powerLawQ01Eur) && powerLawQ99Eur !== powerLawQ01Eur ? (row.closeEur - powerLawQ01Eur) / (powerLawQ99Eur - powerLawQ01Eur) : null),
+            powerLawQ01Usd,
             powerLawQ50Usd: row.powerLawQ50Usd ?? predictPowerLaw(row.date, usdQ50),
-            powerLawQ99Usd: row.powerLawQ99Usd ?? predictPowerLaw(row.date, usdQ99)
+            powerLawQ99Usd,
+            powerLawFactorUsd: row.powerLawFactorUsd ?? (Number.isFinite(powerLawQ99Usd) && Number.isFinite(powerLawQ01Usd) && powerLawQ99Usd !== powerLawQ01Usd ? (row.closeUsd - powerLawQ01Usd) / (powerLawQ99Usd - powerLawQ01Usd) : null)
         };
     });
 }
