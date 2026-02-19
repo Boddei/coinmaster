@@ -150,6 +150,11 @@ function predictPowerLaw(date, alpha, beta) {
   return Math.exp(alpha + (beta * Math.log(Math.max(dayNumber, 1))));
 }
 
+function safeRatio(numerator, denominator) {
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return '';
+  return (numerator / denominator).toFixed(8);
+}
+
 async function main() {
   console.log(`Lade BTC-Daten von ${START_DATE} bis ${END_DATE}...`);
 
@@ -162,7 +167,7 @@ async function main() {
   const usdDaily = pickDailyClose(usdPoints);
 
   const allDates = [...new Set([...eurDaily.keys(), ...usdDaily.keys()])].sort();
-  const rows = ['date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma50d_usd,sma200d_usd,sma200w_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd'];
+  const rows = ['date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd'];
   const validDates = allDates.filter((date) => eurDaily.get(date) != null && usdDaily.get(date) != null);
   const eurSeries = validDates.map((date) => eurDaily.get(date));
   const usdSeries = validDates.map((date) => usdDaily.get(date));
@@ -195,13 +200,17 @@ async function main() {
     const ma50Usd = sma50Usd[validIndex] != null ? sma50Usd[validIndex].toFixed(2) : '';
     const ma200Usd = sma200Usd[validIndex] != null ? sma200Usd[validIndex].toFixed(2) : '';
     const ma200wUsd = sma1400Usd[validIndex] != null ? sma1400Usd[validIndex].toFixed(2) : '';
+    const sma200wFactorEur = safeRatio(eur, Number(ma200wEur));
+    const sma200wFactorUsd = safeRatio(eur, Number(ma200wUsd));
     const plQ01Eur = predictPowerLaw(date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(date, q99.alpha, q99.beta).toFixed(2);
+    const powerLawFactorEur = safeRatio(eur - Number(plQ01Eur), Number(plQ99Eur) - Number(plQ01Eur));
     const plQ01Usd = predictPowerLaw(date, q01Usd.alpha, q01Usd.beta).toFixed(2);
     const plQ50Usd = predictPowerLaw(date, q50Usd.alpha, q50Usd.beta).toFixed(2);
     const plQ99Usd = predictPowerLaw(date, q99Usd.alpha, q99Usd.beta).toFixed(2);
-    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${ma50Usd},${ma200Usd},${ma200wUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${plQ01Usd},${plQ50Usd},${plQ99Usd}`);
+    const powerLawFactorUsd = safeRatio(usd - Number(plQ01Usd), Number(plQ99Usd) - Number(plQ01Usd));
+    rows.push(`${date},${eur.toFixed(2)},${usd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`);
     validIndex += 1;
   }
 
