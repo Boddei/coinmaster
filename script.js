@@ -17,6 +17,7 @@ let btcChart = null;
 let currentChartDays = 7;
 let currentChartScale = 'linear';
 let currentChartCurrency = 'eur';
+let currentKpiCurrency = 'usd';
 let chartRequestId = 0;
 let localPriceRows = [];
 let projectionDate = '';
@@ -80,6 +81,7 @@ async function initApp() {
 
     // Setup chart controls
     setupChartControls();
+    setupKpiCurrencyControls();
     
     // Setup auto-refresh
     setInterval(async () => {
@@ -710,6 +712,30 @@ function setupChartControls() {
     });
 }
 
+
+function setupKpiCurrencyControls() {
+    const kpiCurrencyButtons = document.querySelectorAll('.chart-btn[data-kpi-currency]');
+    const indicatorsTitle = document.getElementById('indicatorsTitle');
+
+    const updateTitle = () => {
+        if (indicatorsTitle) {
+            indicatorsTitle.textContent = `Fundamentale Indikatoren (${currentKpiCurrency.toUpperCase()})`;
+        }
+    };
+
+    updateTitle();
+
+    kpiCurrencyButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            kpiCurrencyButtons.forEach((btn) => btn.classList.remove('active'));
+            button.classList.add('active');
+            currentKpiCurrency = button.getAttribute('data-kpi-currency') || 'usd';
+            updateTitle();
+            await loadFundamentalIndicators();
+        });
+    });
+}
+
 function toNullableNumber(value) {
     if (value == null || value === '') return null;
     const parsed = Number(value);
@@ -829,7 +855,7 @@ function attachCalculatedMovingAverages(rows) {
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
             sma200wUsd,
-            sma200wFactorUsd: row.sma200wFactorUsd ?? (Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeEur / sma200wUsd : null),
+            sma200wFactorUsd: row.sma200wFactorUsd ?? (Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeUsd / sma200wUsd : null),
             powerLawQ01Eur,
             powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50),
             powerLawQ99Eur,
@@ -997,34 +1023,36 @@ async function getLatestLocalClose() {
 async function loadFundamentalIndicators() {
     // Since we're using free APIs, we'll calculate some indicators
     // and use placeholder data for others that require premium APIs
-    
-    await calculate200WMA();
-    calculatePowerLaw();
-    calculateStockToFlow();
+
+    await calculate200WMA(currentKpiCurrency);
+    calculatePowerLaw(currentKpiCurrency);
+    calculateStockToFlow(currentKpiCurrency);
 }
 
-async function calculate200WMA() {
+async function calculate200WMA(currency = 'usd') {
     try {
+        const isUsd = currency === 'usd';
+        const priceKey = isUsd ? 'closeUsd' : 'closeEur';
+        const maKey = isUsd ? 'sma200wUsd' : 'sma200wEur';
+        const factorKey = isUsd ? 'sma200wFactorUsd' : 'sma200wFactorEur';
+        const fiat = isUsd ? 'USD' : 'EUR';
+
         const modelRows = localPriceRows
-            .filter((row) => Number.isFinite(row.closeUsd) && Number.isFinite(row.sma200wUsd))
+            .filter((row) => Number.isFinite(row[priceKey]) && Number.isFinite(row[maKey]) && Number.isFinite(row[factorKey]))
             .sort((a, b) => a.date.localeCompare(b.date));
 
         if (modelRows.length === 0) throw new Error('Keine 200WMA Modelldaten verfügbar');
 
         const latestRow = modelRows[modelRows.length - 1];
-        const currentPriceUsd = latestRow.closeUsd;
-        const current200WmaUsd = latestRow.sma200wUsd;
-        const currentRatioPercent = (currentPriceUsd / current200WmaUsd) * 100;
+        const current200Wma = latestRow[maKey];
+        const currentFactor = latestRow[factorKey];
+        const currentRatioPercent = currentFactor * 100;
 
-        const ratioSeries = modelRows
-            .map((row) => (row.closeUsd / row.sma200wUsd) * 100)
-            .filter(Number.isFinite);
+        const factorSeries = modelRows.map((row) => row[factorKey]).filter(Number.isFinite);
+        const daysWithLargerFactor = factorSeries.filter((factor) => factor > currentFactor).length;
+        const cheaperThanPercent = (daysWithLargerFactor / factorSeries.length) * 100;
 
-        const daysBelowCurrentRatio = ratioSeries.filter((ratio) => ratio < currentRatioPercent).length;
-        const belowSharePercent = (daysBelowCurrentRatio / ratioSeries.length) * 100;
-        const cheaperThanPercent = 100 - belowSharePercent;
-
-        document.getElementById('wma200').innerHTML = formatCurrency(current200WmaUsd, 'USD');
+        document.getElementById('wma200').innerHTML = formatCurrency(current200Wma, fiat);
         document.getElementById('wma200Distance').textContent = `${currentRatioPercent.toFixed(1)}%`;
         document.getElementById('wma200UnderRatio').textContent =
             `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
@@ -1042,38 +1070,45 @@ async function calculate200WMA() {
     }
 }
 
-function calculatePowerLaw() {
+function calculatePowerLaw(currency = 'usd') {
     try {
+        const isUsd = currency === 'usd';
+        const priceKey = isUsd ? 'closeUsd' : 'closeEur';
+        const q01Key = isUsd ? 'powerLawQ01Usd' : 'powerLawQ01Eur';
+        const q50Key = isUsd ? 'powerLawQ50Usd' : 'powerLawQ50Eur';
+        const q99Key = isUsd ? 'powerLawQ99Usd' : 'powerLawQ99Eur';
+        const factorKey = isUsd ? 'powerLawFactorUsd' : 'powerLawFactorEur';
+        const fiat = isUsd ? 'USD' : 'EUR';
+
         const modelRows = localPriceRows
             .filter((row) => (
-                Number.isFinite(row.closeUsd)
-                && Number.isFinite(row.powerLawQ01Usd)
-                && Number.isFinite(row.powerLawQ99Usd)
-                && row.powerLawQ99Usd > row.powerLawQ01Usd
+                Number.isFinite(row[priceKey])
+                && Number.isFinite(row[q01Key])
+                && Number.isFinite(row[q99Key])
+                && Number.isFinite(row[factorKey])
+                && row[q99Key] > row[q01Key]
             ))
             .sort((a, b) => a.date.localeCompare(b.date));
 
         if (modelRows.length === 0) throw new Error('Keine Power-Law-Modelldaten verfügbar');
 
         const latestRow = modelRows[modelRows.length - 1];
-        const currentPriceUsd = latestRow.closeUsd;
-        const q01 = latestRow.powerLawQ01Usd;
-        const q50 = latestRow.powerLawQ50Usd;
-        const q99 = latestRow.powerLawQ99Usd;
-        const currentIndexPercent = Math.max(0, Math.min(100, ((currentPriceUsd - q01) / (q99 - q01)) * 100));
+        const q01 = latestRow[q01Key];
+        const q50 = latestRow[q50Key];
+        const q99 = latestRow[q99Key];
+        const currentFactor = latestRow[factorKey];
+        const currentIndexPercent = Math.max(0, Math.min(100, currentFactor * 100));
 
-        const indexSeries = modelRows
-            .map((row) => ((row.closeUsd - row.powerLawQ01Usd) / (row.powerLawQ99Usd - row.powerLawQ01Usd)) * 100)
-            .filter(Number.isFinite)
-            .map((value) => Math.max(0, Math.min(100, value)));
+        const factorSeries = modelRows
+            .map((row) => row[factorKey])
+            .filter(Number.isFinite);
 
-        const daysBelowOrEqualCurrentIndex = indexSeries.filter((value) => value <= currentIndexPercent).length;
-        const belowOrEqualSharePercent = (daysBelowOrEqualCurrentIndex / indexSeries.length) * 100;
+        const daysWithLargerFactor = factorSeries.filter((value) => value > currentFactor).length;
+        const cheaperThanPercent = (daysWithLargerFactor / factorSeries.length) * 100;
 
-        document.getElementById('powerLawQ01').textContent = formatCurrency(q01, 'USD');
-        document.getElementById('powerLawQ50').textContent = Number.isFinite(q50) ? formatCurrency(q50, 'USD') : '-';
-        document.getElementById('powerLawQ99').textContent = formatCurrency(q99, 'USD');
-        const cheaperThanPercent = 100 - belowOrEqualSharePercent;
+        document.getElementById('powerLawQ01').textContent = formatCurrency(q01, fiat);
+        document.getElementById('powerLawQ50').textContent = Number.isFinite(q50) ? formatCurrency(q50, fiat) : '-';
+        document.getElementById('powerLawQ99').textContent = formatCurrency(q99, fiat);
 
         document.getElementById('powerLaw').innerHTML =
             `<div style="font-size: 1.5rem;">${currentIndexPercent.toFixed(1)}% des PL-Bereichs</div>`;
@@ -1094,22 +1129,27 @@ function calculatePowerLaw() {
     }
 }
 
-function calculateStockToFlow() {
+function calculateStockToFlow(currency = 'usd') {
     // Stock-to-Flow calculation
     // Current supply: ~19.8M BTC, Annual production: ~328,500 BTC (post-2024 halving)
     const currentSupply = 19800000;
     const annualProduction = 164250; // 900 BTC/day * 0.5 (after 2024 halving) * 365
     const s2f = currentSupply / annualProduction;
-    
+
     // S2F Model: Price = 0.4 * S2F^3 (approximate formula)
     const s2fModelPriceUSD = 0.4 * Math.pow(s2f, 3);
-    const s2fModelPriceEUR = s2fModelPriceUSD * 0.92;
-    
-    document.getElementById('stockToFlow').innerHTML = 
+    const latestRow = localPriceRows[localPriceRows.length - 1];
+    const eurUsdRate = Number.isFinite(latestRow?.closeEur) && Number.isFinite(latestRow?.closeUsd) && latestRow.closeUsd !== 0
+        ? latestRow.closeEur / latestRow.closeUsd
+        : 0.92;
+    const isUsd = currency === 'usd';
+    const modelPrice = isUsd ? s2fModelPriceUSD : s2fModelPriceUSD * eurUsdRate;
+
+    document.getElementById('stockToFlow').innerHTML =
         `<div style="font-size: 1.5rem;">${s2f.toFixed(1)}</div>`;
-    document.getElementById('s2fModelPrice').textContent = 
-        formatCurrency(s2fModelPriceEUR, 'EUR');
-    
+    document.getElementById('s2fModelPrice').textContent =
+        formatCurrency(modelPrice, isUsd ? 'USD' : 'EUR');
+
     const interpretation = document.getElementById('s2fInterpretation');
     interpretation.textContent = '💎 Hohe Knappheit (Post-Halving 2024)';
     interpretation.className = 'indicator-interpretation interpretation-bullish';
