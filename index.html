@@ -119,7 +119,13 @@
 
         <!-- Fundamental Indicators -->
         <section class="section indicators-section">
-            <h2>Fundamentale Indikatoren (USD)</h2>
+            <div class="indicators-header">
+                <h2 id="indicatorsTitle">Fundamentale Indikatoren (USD)</h2>
+                <div class="kpi-currency-controls" aria-label="KPI-Währung auswählen">
+                    <button class="chart-btn active" data-kpi-currency="usd">USD</button>
+                    <button class="chart-btn" data-kpi-currency="eur">EUR</button>
+                </div>
+            </div>
             <div class="indicators-grid">
                 <!-- 200 Week Moving Average -->
                 <div class="indicator-card">

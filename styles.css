@@ -84,6 +84,23 @@ body {
     color: var(--text-primary);
 }
 
+.indicators-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 25px;
+}
+
+.indicators-header h2 {
+    margin-bottom: 0;
+}
+
+.kpi-currency-controls {
+    display: flex;
+    gap: 8px;
+}
+
 /* Price Section */
 .price-section {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
@@ -498,6 +515,11 @@ body {
     .chart-controls {
         width: 100%;
         justify-content: center;
+    }
+
+    .indicators-header {
+        flex-direction: column;
+        align-items: flex-start;
     }
     
     .stats-grid,
