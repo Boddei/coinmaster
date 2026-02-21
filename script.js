@@ -851,19 +851,19 @@ function attachCalculatedMovingAverages(rows) {
             sma50dEur: row.sma50dEur ?? (index >= eurWindow.sma50dEur - 1 ? eurSum50 / eurWindow.sma50dEur : null),
             sma200dEur: row.sma200dEur ?? (index >= eurWindow.sma200dEur - 1 ? eurSum200 / eurWindow.sma200dEur : null),
             sma200wEur,
-            sma200wFactorEur: row.sma200wFactorEur ?? (Number.isFinite(sma200wEur) && sma200wEur !== 0 ? row.closeEur / sma200wEur : null),
+            sma200wFactorEur: Number.isFinite(sma200wEur) && sma200wEur !== 0 ? row.closeEur / sma200wEur : null,
             sma50dUsd: row.sma50dUsd ?? (index >= usdWindow.sma50dUsd - 1 ? usdSum50 / usdWindow.sma50dUsd : null),
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
             sma200wUsd,
-            sma200wFactorUsd: row.sma200wFactorUsd ?? (Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeUsd / sma200wUsd : null),
+            sma200wFactorUsd: Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeUsd / sma200wUsd : null,
             powerLawQ01Eur,
             powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50),
             powerLawQ99Eur,
-            powerLawFactorEur: row.powerLawFactorEur ?? (Number.isFinite(powerLawQ99Eur) && Number.isFinite(powerLawQ01Eur) && powerLawQ99Eur !== powerLawQ01Eur ? (row.closeEur - powerLawQ01Eur) / (powerLawQ99Eur - powerLawQ01Eur) : null),
+            powerLawFactorEur: Number.isFinite(powerLawQ99Eur) && Number.isFinite(powerLawQ01Eur) && powerLawQ99Eur !== powerLawQ01Eur ? (row.closeEur - powerLawQ01Eur) / (powerLawQ99Eur - powerLawQ01Eur) : null,
             powerLawQ01Usd,
             powerLawQ50Usd: row.powerLawQ50Usd ?? predictPowerLaw(row.date, usdQ50),
             powerLawQ99Usd,
-            powerLawFactorUsd: row.powerLawFactorUsd ?? (Number.isFinite(powerLawQ99Usd) && Number.isFinite(powerLawQ01Usd) && powerLawQ99Usd !== powerLawQ01Usd ? (row.closeUsd - powerLawQ01Usd) / (powerLawQ99Usd - powerLawQ01Usd) : null)
+            powerLawFactorUsd: Number.isFinite(powerLawQ99Usd) && Number.isFinite(powerLawQ01Usd) && powerLawQ99Usd !== powerLawQ01Usd ? (row.closeUsd - powerLawQ01Usd) / (powerLawQ99Usd - powerLawQ01Usd) : null
         };
     });
 }
@@ -1034,21 +1034,20 @@ async function calculate200WMA(currency = 'usd') {
         const isUsd = currency === 'usd';
         const priceKey = isUsd ? 'closeUsd' : 'closeEur';
         const maKey = isUsd ? 'sma200wUsd' : 'sma200wEur';
-        const factorKey = isUsd ? 'sma200wFactorUsd' : 'sma200wFactorEur';
         const fiat = isUsd ? 'USD' : 'EUR';
 
         const modelRows = localPriceRows
-            .filter((row) => Number.isFinite(row[priceKey]) && Number.isFinite(row[maKey]) && Number.isFinite(row[factorKey]))
+            .filter((row) => Number.isFinite(row[priceKey]) && Number.isFinite(row[maKey]) && Number.isFinite(getSma200wFactor(row, currency)))
             .sort((a, b) => a.date.localeCompare(b.date));
 
         if (modelRows.length === 0) throw new Error('Keine 200WMA Modelldaten verfügbar');
 
         const latestRow = modelRows[modelRows.length - 1];
         const current200Wma = latestRow[maKey];
-        const currentFactor = latestRow[factorKey];
+        const currentFactor = getSma200wFactor(latestRow, currency);
         const currentRatioPercent = currentFactor * 100;
 
-        const factorSeries = modelRows.map((row) => row[factorKey]).filter(Number.isFinite);
+        const factorSeries = modelRows.map((row) => getSma200wFactor(row, currency)).filter(Number.isFinite);
         const daysWithLargerFactor = factorSeries.filter((factor) => factor > currentFactor).length;
         const cheaperThanPercent = (daysWithLargerFactor / factorSeries.length) * 100;
 
@@ -1077,7 +1076,6 @@ function calculatePowerLaw(currency = 'usd') {
         const q01Key = isUsd ? 'powerLawQ01Usd' : 'powerLawQ01Eur';
         const q50Key = isUsd ? 'powerLawQ50Usd' : 'powerLawQ50Eur';
         const q99Key = isUsd ? 'powerLawQ99Usd' : 'powerLawQ99Eur';
-        const factorKey = isUsd ? 'powerLawFactorUsd' : 'powerLawFactorEur';
         const fiat = isUsd ? 'USD' : 'EUR';
 
         const modelRows = localPriceRows
@@ -1085,7 +1083,7 @@ function calculatePowerLaw(currency = 'usd') {
                 Number.isFinite(row[priceKey])
                 && Number.isFinite(row[q01Key])
                 && Number.isFinite(row[q99Key])
-                && Number.isFinite(row[factorKey])
+                && Number.isFinite(getPowerLawFactor(row, currency))
                 && row[q99Key] > row[q01Key]
             ))
             .sort((a, b) => a.date.localeCompare(b.date));
@@ -1096,11 +1094,11 @@ function calculatePowerLaw(currency = 'usd') {
         const q01 = latestRow[q01Key];
         const q50 = latestRow[q50Key];
         const q99 = latestRow[q99Key];
-        const currentFactor = latestRow[factorKey];
+        const currentFactor = getPowerLawFactor(latestRow, currency);
         const currentIndexPercent = Math.max(0, Math.min(100, currentFactor * 100));
 
         const factorSeries = modelRows
-            .map((row) => row[factorKey])
+            .map((row) => getPowerLawFactor(row, currency))
             .filter(Number.isFinite);
 
         const daysWithLargerFactor = factorSeries.filter((value) => value > currentFactor).length;
@@ -1153,6 +1151,27 @@ function calculateStockToFlow(currency = 'usd') {
     const interpretation = document.getElementById('s2fInterpretation');
     interpretation.textContent = '💎 Hohe Knappheit (Post-Halving 2024)';
     interpretation.className = 'indicator-interpretation interpretation-bullish';
+}
+
+function getSma200wFactor(row, currency = 'usd') {
+    if (!row) return null;
+    const isUsd = currency === 'usd';
+    const price = isUsd ? row.closeUsd : row.closeEur;
+    const ma200w = isUsd ? row.sma200wUsd : row.sma200wEur;
+
+    if (!Number.isFinite(price) || !Number.isFinite(ma200w) || ma200w === 0) return null;
+    return price / ma200w;
+}
+
+function getPowerLawFactor(row, currency = 'usd') {
+    if (!row) return null;
+    const isUsd = currency === 'usd';
+    const price = isUsd ? row.closeUsd : row.closeEur;
+    const q01 = isUsd ? row.powerLawQ01Usd : row.powerLawQ01Eur;
+    const q99 = isUsd ? row.powerLawQ99Usd : row.powerLawQ99Eur;
+
+    if (!Number.isFinite(price) || !Number.isFinite(q01) || !Number.isFinite(q99) || q99 === q01) return null;
+    return (price - q01) / (q99 - q01);
 }
 
 // ============================================================================
