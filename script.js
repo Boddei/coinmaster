@@ -20,6 +20,7 @@ let currentChartCurrency = 'eur';
 let currentKpiCurrency = 'usd';
 let chartRequestId = 0;
 let localPriceRows = [];
+let localPriceRowsPromise = null;
 let projectionDate = '';
 const maVisibility = {
     sma50d: false,
@@ -72,16 +73,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
     console.log('Bitcoin Dashboard initialisiert...');
-    localPriceRows = await fetchLocalCsvPrices();
-    
-    // Load initial data
-    await loadBitcoinData();
-    await loadChartData(currentChartDays);
-    await loadFundamentalIndicators();
+    localPriceRowsPromise = ensureLocalPriceRows();
 
-    // Setup chart controls
+    // Setup controls immediately so UI can react while data streams in
     setupChartControls();
     setupKpiCurrencyControls();
+
+    // Stage 1: top KPIs first
+    await loadBitcoinData();
+
+    // Stage 2 + 3: chart first, then calculations/indicators
+    requestAnimationFrame(async () => {
+        await localPriceRowsPromise;
+        await loadChartData(currentChartDays);
+
+        setTimeout(async () => {
+            await loadFundamentalIndicators();
+        }, 0);
+    });
     
     // Setup auto-refresh
     setInterval(async () => {
@@ -110,7 +119,10 @@ async function loadBitcoinData() {
         const data = await response.json();
         updatePriceDisplay(data);
         updateStats(data);
-        await updateNetworkStats(data);
+        updateNetworkStats(data).catch((error) => {
+            console.error('Fehler beim Laden der Netzwerkdaten:', error);
+            clearNetworkStats();
+        });
         
     } catch (error) {
         console.error('Fehler beim Laden der Bitcoin-Daten:', error);
@@ -128,6 +140,13 @@ async function loadBitcoinData() {
             clearNetworkStats();
         }
     }
+}
+
+async function ensureLocalPriceRows() {
+    if (localPriceRows.length > 0) return localPriceRows;
+    const rows = await fetchLocalCsvPrices();
+    localPriceRows = rows;
+    return rows;
 }
 
 function updatePriceDisplay(data) {
@@ -1023,6 +1042,8 @@ async function getLatestLocalClose() {
 async function loadFundamentalIndicators() {
     // Since we're using free APIs, we'll calculate some indicators
     // and use placeholder data for others that require premium APIs
+
+    await ensureLocalPriceRows();
 
     await calculate200WMA(currentKpiCurrency);
     calculatePowerLaw(currentKpiCurrency);
