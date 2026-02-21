@@ -201,7 +201,7 @@ async function main() {
     const ma200Usd = sma200Usd[validIndex] != null ? sma200Usd[validIndex].toFixed(2) : '';
     const ma200wUsd = sma1400Usd[validIndex] != null ? sma1400Usd[validIndex].toFixed(2) : '';
     const sma200wFactorEur = safeRatio(eur, Number(ma200wEur));
-    const sma200wFactorUsd = safeRatio(eur, Number(ma200wUsd));
+    const sma200wFactorUsd = safeRatio(usd, Number(ma200wUsd));
     const plQ01Eur = predictPowerLaw(date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(date, q99.alpha, q99.beta).toFixed(2);
