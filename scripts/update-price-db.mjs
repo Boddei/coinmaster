@@ -239,7 +239,7 @@ async function main() {
     const ma200Usd = sma200Usd[index] != null ? sma200Usd[index].toFixed(2) : '';
     const ma200wUsd = sma1400Usd[index] != null ? sma1400Usd[index].toFixed(2) : '';
     const sma200wFactorEur = safeRatio(row.closeEur, Number(ma200wEur));
-    const sma200wFactorUsd = safeRatio(row.closeEur, Number(ma200wUsd));
+    const sma200wFactorUsd = safeRatio(row.closeUsd, Number(ma200wUsd));
     const plQ01Eur = predictPowerLaw(row.date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(row.date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(row.date, q99.alpha, q99.beta).toFixed(2);
