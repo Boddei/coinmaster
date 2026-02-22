@@ -1051,7 +1051,7 @@ async function loadFundamentalIndicators() {
     await loadFearAndGreedIndex();
 }
 
-function calculateRsi(currency = 'usd', period = 14) {
+function calculateRsi(currency = 'usd') {
     try {
         const isUsd = currency === 'usd';
         const priceKey = isUsd ? 'closeUsd' : 'closeEur';
@@ -1059,37 +1059,48 @@ function calculateRsi(currency = 'usd', period = 14) {
             .map((row) => row[priceKey])
             .filter(Number.isFinite);
 
-        if (closes.length <= period) {
-            throw new Error('Zu wenige Daten für RSI');
-        }
+        const rsi7 = calculateRsiForPeriod(closes, 7);
+        const rsi14 = calculateRsiForPeriod(closes, 14);
+        const rsi30 = calculateRsiForPeriod(closes, 30);
 
-        const recent = closes.slice(-(period + 1));
-        let gains = 0;
-        let losses = 0;
+        const latestRsi = rsi14;
+        const { signal } = getRsiInterpretation(latestRsi);
 
-        for (let i = 1; i < recent.length; i += 1) {
-            const delta = recent[i] - recent[i - 1];
-            if (delta >= 0) gains += delta;
-            else losses += Math.abs(delta);
-        }
-
-        const averageGain = gains / period;
-        const averageLoss = losses / period;
-        const rs = averageLoss === 0 ? Infinity : averageGain / averageLoss;
-        const rsi = 100 - (100 / (1 + rs));
-
-        const { signal } = getRsiInterpretation(rsi);
-
-        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${rsi.toFixed(1)}</div>`;
+        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${latestRsi.toFixed(1)}</div>`;
+        document.getElementById('rsi7d').textContent = rsi7.toFixed(1);
+        document.getElementById('rsi14d').textContent = rsi14.toFixed(1);
+        document.getElementById('rsi30d').textContent = rsi30.toFixed(1);
         document.getElementById('rsiSignal').textContent = signal;
-        document.getElementById('rsiSource').textContent = `Lokal berechnet (${period}D)`;
 
     } catch (error) {
         console.error('Fehler bei RSI-Berechnung:', error);
         document.getElementById('rsiValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+        document.getElementById('rsi7d').textContent = '-';
+        document.getElementById('rsi14d').textContent = '-';
+        document.getElementById('rsi30d').textContent = '-';
         document.getElementById('rsiSignal').textContent = '-';
-        document.getElementById('rsiSource').textContent = '-';
     }
+}
+
+function calculateRsiForPeriod(closes, period) {
+    if (!Array.isArray(closes) || closes.length <= period) {
+        throw new Error(`Zu wenige Daten für RSI ${period}D`);
+    }
+
+    const recent = closes.slice(-(period + 1));
+    let gains = 0;
+    let losses = 0;
+
+    for (let i = 1; i < recent.length; i += 1) {
+        const delta = recent[i] - recent[i - 1];
+        if (delta >= 0) gains += delta;
+        else losses += Math.abs(delta);
+    }
+
+    const averageGain = gains / period;
+    const averageLoss = losses / period;
+    const rs = averageLoss === 0 ? Infinity : averageGain / averageLoss;
+    return 100 - (100 / (1 + rs));
 }
 
 function getRsiInterpretation(rsi) {
@@ -1118,11 +1129,17 @@ function getRsiInterpretation(rsi) {
 
 async function loadFearAndGreedIndex() {
     try {
-        const response = await fetch('https://api.alternative.me/fng/?limit=1&format=json');
-        if (!response.ok) throw new Error('Fear & Greed API Fehler');
+        const [latestResponse, historyResponse] = await Promise.all([
+            fetch('https://api.alternative.me/fng/?limit=1&format=json'),
+            fetch('https://api.alternative.me/fng/?limit=0&format=json')
+        ]);
 
-        const payload = await response.json();
+        if (!latestResponse.ok || !historyResponse.ok) throw new Error('Fear & Greed API Fehler');
+
+        const payload = await latestResponse.json();
+        const historyPayload = await historyResponse.json();
         const latest = payload?.data?.[0];
+        const history = Array.isArray(historyPayload?.data) ? historyPayload.data : [];
         const value = Number(latest?.value);
         const classification = latest?.value_classification;
         const timestampSeconds = Number(latest?.timestamp);
@@ -1138,11 +1155,24 @@ async function loadFearAndGreedIndex() {
         document.getElementById('fngValue').innerHTML = `<div style="font-size: 1.5rem;">${value}</div>`;
         document.getElementById('fngClassification').textContent = classification;
         document.getElementById('fngUpdated').textContent = updated;
+
+        const historicalValues = history
+            .map((entry) => Number(entry?.value))
+            .filter(Number.isFinite);
+
+        if (historicalValues.length > 0) {
+            const lowerOrEqualCount = historicalValues.filter((historicalValue) => historicalValue <= value).length;
+            const lowerThanPercent = (lowerOrEqualCount / historicalValues.length) * 100;
+            document.getElementById('fngPercentile').textContent = `Niedriger als ${lowerThanPercent.toFixed(1)}% der Zeit`;
+        } else {
+            document.getElementById('fngPercentile').textContent = '-';
+        }
     } catch (error) {
         console.error('Fehler beim Laden des Fear & Greed Index:', error);
         document.getElementById('fngValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
         document.getElementById('fngClassification').textContent = '-';
         document.getElementById('fngUpdated').textContent = '-';
+        document.getElementById('fngPercentile').textContent = '-';
     }
 }
 
