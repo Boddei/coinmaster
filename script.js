@@ -1047,7 +1047,6 @@ async function loadFundamentalIndicators() {
 
     await calculate200WMA(currentKpiCurrency);
     calculatePowerLaw(currentKpiCurrency);
-    calculateStockToFlow(currentKpiCurrency);
     calculateRsi(currentKpiCurrency);
     await loadFearAndGreedIndex();
 }
@@ -1079,21 +1078,17 @@ function calculateRsi(currency = 'usd', period = 14) {
         const rs = averageLoss === 0 ? Infinity : averageGain / averageLoss;
         const rsi = 100 - (100 / (1 + rs));
 
-        const { signal, interpretationClass, interpretationText } = getRsiInterpretation(rsi);
+        const { signal } = getRsiInterpretation(rsi);
 
         document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${rsi.toFixed(1)}</div>`;
         document.getElementById('rsiSignal').textContent = signal;
         document.getElementById('rsiSource').textContent = `Lokal berechnet (${period}D)`;
 
-        const interpretation = document.getElementById('rsiInterpretation');
-        interpretation.textContent = interpretationText;
-        interpretation.className = `indicator-interpretation ${interpretationClass}`;
     } catch (error) {
         console.error('Fehler bei RSI-Berechnung:', error);
         document.getElementById('rsiValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
         document.getElementById('rsiSignal').textContent = '-';
         document.getElementById('rsiSource').textContent = '-';
-        document.getElementById('rsiInterpretation').textContent = '';
     }
 }
 
@@ -1101,31 +1096,23 @@ function getRsiInterpretation(rsi) {
     if (!Number.isFinite(rsi)) {
         return {
             signal: '-',
-            interpretationClass: 'interpretation-neutral',
-            interpretationText: ''
         };
     }
 
     if (rsi >= 70) {
         return {
             signal: 'Überkauft',
-            interpretationClass: 'interpretation-bearish',
-            interpretationText: '⚠️ Starkes Momentum, kurzfristig überhitzt.'
         };
     }
 
     if (rsi <= 30) {
         return {
             signal: 'Überverkauft',
-            interpretationClass: 'interpretation-bullish',
-            interpretationText: '🟢 Stark gefallen, möglicher Erholungsbereich.'
         };
     }
 
     return {
         signal: 'Neutral',
-        interpretationClass: 'interpretation-neutral',
-        interpretationText: 'ℹ️ Ausgeglichenes Momentum ohne Extremwerte.'
     };
 }
 
@@ -1148,50 +1135,15 @@ async function loadFearAndGreedIndex() {
             ? new Date(timestampSeconds * 1000).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
             : '-';
 
-        const { interpretationClass, interpretationText } = getFearGreedInterpretation(value);
-
         document.getElementById('fngValue').innerHTML = `<div style="font-size: 1.5rem;">${value}</div>`;
         document.getElementById('fngClassification').textContent = classification;
         document.getElementById('fngUpdated').textContent = updated;
-
-        const interpretation = document.getElementById('fngInterpretation');
-        interpretation.textContent = interpretationText;
-        interpretation.className = `indicator-interpretation ${interpretationClass}`;
     } catch (error) {
         console.error('Fehler beim Laden des Fear & Greed Index:', error);
         document.getElementById('fngValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
         document.getElementById('fngClassification').textContent = '-';
         document.getElementById('fngUpdated').textContent = '-';
-        document.getElementById('fngInterpretation').textContent = '';
     }
-}
-
-function getFearGreedInterpretation(value) {
-    if (!Number.isFinite(value)) {
-        return {
-            interpretationClass: 'interpretation-neutral',
-            interpretationText: ''
-        };
-    }
-
-    if (value <= 25) {
-        return {
-            interpretationClass: 'interpretation-bullish',
-            interpretationText: '🟢 Extreme Angst: historisch oft antizyklisch interessant.'
-        };
-    }
-
-    if (value >= 75) {
-        return {
-            interpretationClass: 'interpretation-bearish',
-            interpretationText: '⚠️ Extreme Gier: erhöhtes Rückschlagrisiko.'
-        };
-    }
-
-    return {
-        interpretationClass: 'interpretation-neutral',
-        interpretationText: 'ℹ️ Normale Marktstimmung ohne Extrembereich.'
-    };
 }
 
 async function calculate200WMA(currency = 'usd') {
@@ -1221,16 +1173,11 @@ async function calculate200WMA(currency = 'usd') {
         document.getElementById('wma200UnderRatio').textContent =
             `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
-        const interpretation = document.getElementById('wma200Interpretation');
-        interpretation.textContent = '';
-        interpretation.className = 'indicator-interpretation interpretation-neutral';
-
     } catch (error) {
         console.error('Fehler bei 200WMA Berechnung:', error);
         document.getElementById('wma200').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
         document.getElementById('wma200Distance').textContent = '-';
         document.getElementById('wma200UnderRatio').textContent = '-';
-        document.getElementById('wma200Interpretation').textContent = '';
     }
 }
 
@@ -1278,9 +1225,6 @@ function calculatePowerLaw(currency = 'usd') {
         document.getElementById('powerLawPercentile').textContent =
             `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
-        const interpretation = document.getElementById('powerLawInterpretation');
-        interpretation.textContent = '';
-        interpretation.className = 'indicator-interpretation interpretation-neutral';
     } catch (error) {
         console.error('Fehler bei Power-Law-Berechnung:', error);
         document.getElementById('powerLaw').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
@@ -1288,34 +1232,7 @@ function calculatePowerLaw(currency = 'usd') {
         document.getElementById('powerLawQ50').textContent = '-';
         document.getElementById('powerLawQ99').textContent = '-';
         document.getElementById('powerLawPercentile').textContent = '-';
-        document.getElementById('powerLawInterpretation').textContent = '';
     }
-}
-
-function calculateStockToFlow(currency = 'usd') {
-    // Stock-to-Flow calculation
-    // Current supply: ~19.8M BTC, Annual production: ~328,500 BTC (post-2024 halving)
-    const currentSupply = 19800000;
-    const annualProduction = 164250; // 900 BTC/day * 0.5 (after 2024 halving) * 365
-    const s2f = currentSupply / annualProduction;
-
-    // S2F Model: Price = 0.4 * S2F^3 (approximate formula)
-    const s2fModelPriceUSD = 0.4 * Math.pow(s2f, 3);
-    const latestRow = localPriceRows[localPriceRows.length - 1];
-    const eurUsdRate = Number.isFinite(latestRow?.closeEur) && Number.isFinite(latestRow?.closeUsd) && latestRow.closeUsd !== 0
-        ? latestRow.closeEur / latestRow.closeUsd
-        : 0.92;
-    const isUsd = currency === 'usd';
-    const modelPrice = isUsd ? s2fModelPriceUSD : s2fModelPriceUSD * eurUsdRate;
-
-    document.getElementById('stockToFlow').innerHTML =
-        `<div style="font-size: 1.5rem;">${s2f.toFixed(1)}</div>`;
-    document.getElementById('s2fModelPrice').textContent =
-        formatCurrency(modelPrice, isUsd ? 'USD' : 'EUR');
-
-    const interpretation = document.getElementById('s2fInterpretation');
-    interpretation.textContent = '💎 Hohe Knappheit (Post-Halving 2024)';
-    interpretation.className = 'indicator-interpretation interpretation-bullish';
 }
 
 function getSma200wFactor(row, currency = 'usd') {
