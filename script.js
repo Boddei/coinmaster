@@ -35,6 +35,18 @@ const POWER_LAW_SERIES = [
     { key: 'powerLawQ99', color: '#22c55e', label: 'Q99' }
 ];
 
+const ASSET_CLASSES_BASE = [
+    { key: 'realEstate', name: 'Immobilien (global)', marketCapUsd: 380e12, color: '#7c7c7c' },
+    { key: 'equities', name: 'Aktien (global)', marketCapUsd: 125e12, color: '#3b82f6' },
+    { key: 'privateBusinesses', name: 'Unternehmen (privat)', marketCapUsd: 60e12, color: '#6366f1' },
+    { key: 'sovereignBonds', name: 'Anleihen (Staat)', marketCapUsd: 85e12, color: '#8b5cf6' },
+    { key: 'corporateBonds', name: 'Anleihen (Unternehmen)', marketCapUsd: 45e12, color: '#a855f7' },
+    { key: 'cash', name: 'Cash (M2, global)', marketCapUsd: 110e12, color: '#16a34a' },
+    { key: 'preciousMetals', name: 'Edelmetalle', marketCapUsd: 18e12, color: '#d4af37' },
+    { key: 'art', name: 'Kunst', marketCapUsd: 2.2e12, color: '#ec4899' },
+    { key: 'bitcoin', name: 'Bitcoin', marketCapUsd: 2.1e12, color: '#f7931a' }
+];
+
 const powerLawFormulaOverlayPlugin = {
     id: 'powerLawFormulaOverlay',
     afterDatasetsDraw(chart) {
@@ -78,6 +90,7 @@ async function initApp() {
     // Setup controls immediately so UI can react while data streams in
     setupChartControls();
     setupKpiCurrencyControls();
+    renderAssetClassTreemap();
 
     // Stage 1: top KPIs first
     await loadBitcoinData();
@@ -190,6 +203,8 @@ function updateStats(data) {
     // 24h volume
     document.getElementById('volume24h').textContent = 
         formatLargeNumber(price.total_volume.eur) + ' €';
+
+    renderAssetClassTreemap(price.market_cap.usd);
 }
 
 async function updateNetworkStats(data) {
@@ -1340,6 +1355,95 @@ function updateLastUpdateTime() {
 function showError(message) {
     console.error(message);
     // Could add a toast notification here
+}
+
+function renderAssetClassTreemap(bitcoinMarketCapUsd) {
+    const container = document.getElementById('assetTreemap');
+    if (!container) return;
+
+    const assets = ASSET_CLASSES_BASE.map((asset) => ({ ...asset }));
+    if (Number.isFinite(bitcoinMarketCapUsd) && bitcoinMarketCapUsd > 0) {
+        const bitcoinAsset = assets.find((asset) => asset.key === 'bitcoin');
+        if (bitcoinAsset) bitcoinAsset.marketCapUsd = bitcoinMarketCapUsd;
+    }
+
+    const total = assets.reduce((sum, asset) => sum + asset.marketCapUsd, 0);
+    if (!Number.isFinite(total) || total <= 0) {
+        container.innerHTML = '<div class="loading">Assetdaten werden geladen...</div>';
+        return;
+    }
+
+    const sorted = [...assets].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
+    const layout = computeTreemapLayout(sorted, { x: 0, y: 0, width: 100, height: 100 }, total);
+
+    container.innerHTML = layout
+        .map(({ asset, rect }) => {
+            const valueLabel = formatUsdMarketCap(asset.marketCapUsd);
+            return `
+                <div
+                    class="asset-tile"
+                    style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%;background:${asset.color};"
+                    title="${asset.name}: ${valueLabel}"
+                >
+                    <div class="asset-tile-name">${asset.name}</div>
+                    <div class="asset-tile-value">${valueLabel}</div>
+                </div>
+            `;
+        })
+        .join('');
+}
+
+function computeTreemapLayout(assets, rect, totalValue) {
+    if (!Array.isArray(assets) || assets.length === 0 || totalValue <= 0) return [];
+
+    if (assets.length === 1) {
+        return [{ asset: assets[0], rect }];
+    }
+
+    let groupValue = 0;
+    let splitIndex = 0;
+    for (let i = 0; i < assets.length; i += 1) {
+        const next = groupValue + assets[i].marketCapUsd;
+        if (next <= totalValue / 2 || i === 0) {
+            groupValue = next;
+            splitIndex = i + 1;
+        } else {
+            break;
+        }
+    }
+
+    const firstGroup = assets.slice(0, splitIndex);
+    const secondGroup = assets.slice(splitIndex);
+    const firstRatio = groupValue / totalValue;
+
+    if (rect.width >= rect.height) {
+        const firstWidth = rect.width * firstRatio;
+        return [
+            ...computeTreemapLayout(firstGroup, { ...rect, width: firstWidth }, groupValue),
+            ...computeTreemapLayout(
+                secondGroup,
+                { x: rect.x + firstWidth, y: rect.y, width: rect.width - firstWidth, height: rect.height },
+                totalValue - groupValue
+            )
+        ];
+    }
+
+    const firstHeight = rect.height * firstRatio;
+    return [
+        ...computeTreemapLayout(firstGroup, { ...rect, height: firstHeight }, groupValue),
+        ...computeTreemapLayout(
+            secondGroup,
+            { x: rect.x, y: rect.y + firstHeight, width: rect.width, height: rect.height - firstHeight },
+            totalValue - groupValue
+        )
+    ];
+}
+
+function formatUsdMarketCap(value) {
+    if (!Number.isFinite(value)) return '-';
+    if (value >= 1e12) return `$${(value / 1e12).toFixed(1)} Bio.`;
+    if (value >= 1e9) return `$${(value / 1e9).toFixed(1)} Mrd.`;
+    return `$${value.toLocaleString('de-DE')}`;
 }
 
 // ============================================================================
