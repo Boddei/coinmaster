@@ -1163,7 +1163,8 @@ async function loadFearAndGreedIndex() {
         if (historicalValues.length > 0) {
             const higherCount = historicalValues.filter((historicalValue) => historicalValue > value).length;
             const higherThanPercent = (higherCount / historicalValues.length) * 100;
-            document.getElementById('fngPercentile').textContent = `Höher als aktuell in ${higherThanPercent.toFixed(1)}% der Zeit`;
+            const higherThanPercentFormatted = higherThanPercent.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            document.getElementById('fngPercentile').textContent = `Niedriger als ${higherThanPercentFormatted}% der Zeit`;
         } else {
             document.getElementById('fngPercentile').textContent = '-';
         }
