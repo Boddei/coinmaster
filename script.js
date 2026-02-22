@@ -1048,6 +1048,150 @@ async function loadFundamentalIndicators() {
     await calculate200WMA(currentKpiCurrency);
     calculatePowerLaw(currentKpiCurrency);
     calculateStockToFlow(currentKpiCurrency);
+    calculateRsi(currentKpiCurrency);
+    await loadFearAndGreedIndex();
+}
+
+function calculateRsi(currency = 'usd', period = 14) {
+    try {
+        const isUsd = currency === 'usd';
+        const priceKey = isUsd ? 'closeUsd' : 'closeEur';
+        const closes = localPriceRows
+            .map((row) => row[priceKey])
+            .filter(Number.isFinite);
+
+        if (closes.length <= period) {
+            throw new Error('Zu wenige Daten für RSI');
+        }
+
+        const recent = closes.slice(-(period + 1));
+        let gains = 0;
+        let losses = 0;
+
+        for (let i = 1; i < recent.length; i += 1) {
+            const delta = recent[i] - recent[i - 1];
+            if (delta >= 0) gains += delta;
+            else losses += Math.abs(delta);
+        }
+
+        const averageGain = gains / period;
+        const averageLoss = losses / period;
+        const rs = averageLoss === 0 ? Infinity : averageGain / averageLoss;
+        const rsi = 100 - (100 / (1 + rs));
+
+        const { signal, interpretationClass, interpretationText } = getRsiInterpretation(rsi);
+
+        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${rsi.toFixed(1)}</div>`;
+        document.getElementById('rsiSignal').textContent = signal;
+        document.getElementById('rsiSource').textContent = `Lokal berechnet (${period}D)`;
+
+        const interpretation = document.getElementById('rsiInterpretation');
+        interpretation.textContent = interpretationText;
+        interpretation.className = `indicator-interpretation ${interpretationClass}`;
+    } catch (error) {
+        console.error('Fehler bei RSI-Berechnung:', error);
+        document.getElementById('rsiValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+        document.getElementById('rsiSignal').textContent = '-';
+        document.getElementById('rsiSource').textContent = '-';
+        document.getElementById('rsiInterpretation').textContent = '';
+    }
+}
+
+function getRsiInterpretation(rsi) {
+    if (!Number.isFinite(rsi)) {
+        return {
+            signal: '-',
+            interpretationClass: 'interpretation-neutral',
+            interpretationText: ''
+        };
+    }
+
+    if (rsi >= 70) {
+        return {
+            signal: 'Überkauft',
+            interpretationClass: 'interpretation-bearish',
+            interpretationText: '⚠️ Starkes Momentum, kurzfristig überhitzt.'
+        };
+    }
+
+    if (rsi <= 30) {
+        return {
+            signal: 'Überverkauft',
+            interpretationClass: 'interpretation-bullish',
+            interpretationText: '🟢 Stark gefallen, möglicher Erholungsbereich.'
+        };
+    }
+
+    return {
+        signal: 'Neutral',
+        interpretationClass: 'interpretation-neutral',
+        interpretationText: 'ℹ️ Ausgeglichenes Momentum ohne Extremwerte.'
+    };
+}
+
+async function loadFearAndGreedIndex() {
+    try {
+        const response = await fetch('https://api.alternative.me/fng/?limit=1&format=json');
+        if (!response.ok) throw new Error('Fear & Greed API Fehler');
+
+        const payload = await response.json();
+        const latest = payload?.data?.[0];
+        const value = Number(latest?.value);
+        const classification = latest?.value_classification;
+        const timestampSeconds = Number(latest?.timestamp);
+
+        if (!Number.isFinite(value) || !classification) {
+            throw new Error('Ungültige Fear & Greed Daten');
+        }
+
+        const updated = Number.isFinite(timestampSeconds)
+            ? new Date(timestampSeconds * 1000).toLocaleDateString('de-DE', { year: 'numeric', month: '2-digit', day: '2-digit' })
+            : '-';
+
+        const { interpretationClass, interpretationText } = getFearGreedInterpretation(value);
+
+        document.getElementById('fngValue').innerHTML = `<div style="font-size: 1.5rem;">${value}</div>`;
+        document.getElementById('fngClassification').textContent = classification;
+        document.getElementById('fngUpdated').textContent = updated;
+
+        const interpretation = document.getElementById('fngInterpretation');
+        interpretation.textContent = interpretationText;
+        interpretation.className = `indicator-interpretation ${interpretationClass}`;
+    } catch (error) {
+        console.error('Fehler beim Laden des Fear & Greed Index:', error);
+        document.getElementById('fngValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
+        document.getElementById('fngClassification').textContent = '-';
+        document.getElementById('fngUpdated').textContent = '-';
+        document.getElementById('fngInterpretation').textContent = '';
+    }
+}
+
+function getFearGreedInterpretation(value) {
+    if (!Number.isFinite(value)) {
+        return {
+            interpretationClass: 'interpretation-neutral',
+            interpretationText: ''
+        };
+    }
+
+    if (value <= 25) {
+        return {
+            interpretationClass: 'interpretation-bullish',
+            interpretationText: '🟢 Extreme Angst: historisch oft antizyklisch interessant.'
+        };
+    }
+
+    if (value >= 75) {
+        return {
+            interpretationClass: 'interpretation-bearish',
+            interpretationText: '⚠️ Extreme Gier: erhöhtes Rückschlagrisiko.'
+        };
+    }
+
+    return {
+        interpretationClass: 'interpretation-neutral',
+        interpretationText: 'ℹ️ Normale Marktstimmung ohne Extrembereich.'
+    };
 }
 
 async function calculate200WMA(currency = 'usd') {
