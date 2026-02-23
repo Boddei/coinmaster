@@ -1072,6 +1072,25 @@ async function loadFundamentalIndicators() {
     await loadFearAndGreedIndex();
 }
 
+
+function setIndicatorLightState(elementId, state = 'neutral') {
+    const light = document.getElementById(elementId);
+    if (!light) return;
+
+    light.classList.remove('indicator-light--green', 'indicator-light--yellow', 'indicator-light--red');
+
+    if (state === 'green') light.classList.add('indicator-light--green');
+    if (state === 'yellow') light.classList.add('indicator-light--yellow');
+    if (state === 'red') light.classList.add('indicator-light--red');
+}
+
+function getAmpelStateByThresholds(value, { greenMax, yellowMax }) {
+    if (!Number.isFinite(value)) return 'neutral';
+    if (value <= greenMax) return 'green';
+    if (value <= yellowMax) return 'yellow';
+    return 'red';
+}
+
 function calculateRsi(currency = 'usd') {
     try {
         const isUsd = currency === 'usd';
@@ -1093,6 +1112,8 @@ function calculateRsi(currency = 'usd') {
         document.getElementById('rsi30d').textContent = rsi30.toFixed(1);
         document.getElementById('rsiSignal').textContent = signal;
 
+        setIndicatorLightState('rsiLight', getAmpelStateByThresholds(latestRsi, { greenMax: 25, yellowMax: 75 }));
+
     } catch (error) {
         console.error('Fehler bei RSI-Berechnung:', error);
         document.getElementById('rsiValue').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
@@ -1100,6 +1121,7 @@ function calculateRsi(currency = 'usd') {
         document.getElementById('rsi14d').textContent = '-';
         document.getElementById('rsi30d').textContent = '-';
         document.getElementById('rsiSignal').textContent = '-';
+        setIndicatorLightState('rsiLight', 'neutral');
     }
 }
 
@@ -1177,6 +1199,8 @@ async function loadFearAndGreedIndex() {
         document.getElementById('fngClassification').textContent = classification;
         document.getElementById('fngUpdated').textContent = updated;
 
+        setIndicatorLightState('fngLight', getAmpelStateByThresholds(value, { greenMax: 25, yellowMax: 75 }));
+
         const historicalValues = history
             .map((entry) => Number(entry?.value))
             .filter(Number.isFinite);
@@ -1195,6 +1219,7 @@ async function loadFearAndGreedIndex() {
         document.getElementById('fngClassification').textContent = '-';
         document.getElementById('fngUpdated').textContent = '-';
         document.getElementById('fngPercentile').textContent = '-';
+        setIndicatorLightState('fngLight', 'neutral');
     }
 }
 
@@ -1225,11 +1250,14 @@ async function calculate200WMA(currency = 'usd') {
         document.getElementById('wma200UnderRatio').textContent =
             `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
+        setIndicatorLightState('wma200Light', getAmpelStateByThresholds(currentFactor, { greenMax: 1.25, yellowMax: 2 }));
+
     } catch (error) {
         console.error('Fehler bei 200WMA Berechnung:', error);
         document.getElementById('wma200').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
         document.getElementById('wma200Distance').textContent = '-';
         document.getElementById('wma200UnderRatio').textContent = '-';
+        setIndicatorLightState('wma200Light', 'neutral');
     }
 }
 
@@ -1277,6 +1305,8 @@ function calculatePowerLaw(currency = 'usd') {
         document.getElementById('powerLawPercentile').textContent =
             `Günstiger als ${cheaperThanPercent.toFixed(1)}% der Zeit`;
 
+        setIndicatorLightState('powerLawLight', getAmpelStateByThresholds(currentIndexPercent, { greenMax: 20, yellowMax: 50 }));
+
     } catch (error) {
         console.error('Fehler bei Power-Law-Berechnung:', error);
         document.getElementById('powerLaw').innerHTML = '<span style="color: #ef4444;">Fehler</span>';
@@ -1284,6 +1314,7 @@ function calculatePowerLaw(currency = 'usd') {
         document.getElementById('powerLawQ50').textContent = '-';
         document.getElementById('powerLawQ99').textContent = '-';
         document.getElementById('powerLawPercentile').textContent = '-';
+        setIndicatorLightState('powerLawLight', 'neutral');
     }
 }
 
@@ -1476,7 +1507,12 @@ function formatEuroTrillion(value) {
 
 function formatScenarioPrice(value) {
     if (!Number.isFinite(value) || value <= 0) return '-';
-    return formatCurrency(value, 'EUR');
+    return value.toLocaleString('de-DE', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    });
 }
 
 function computeTreemapLayout(assets, rect, totalValue) {
