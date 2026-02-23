@@ -23,7 +23,7 @@
         <!-- Bitcoin Price Section -->
         <section class="section price-section">
             <div class="price-card main-price">
-                <h2>Bitcoin Preis</h2>
+                <h2>Bitcoin Fundamentaldaten</h2>
                 <div class="price-display">
                     <div class="price" id="btcPrice">-</div>
                     <div class="price-change" id="priceChange">-</div>
@@ -80,10 +80,56 @@
             </div>
         </section>
 
+        <!-- Asset Classes Treemap -->
+        <section class="section asset-classes-section">
+            <div class="asset-classes-header">
+                <h2>Globale Asset-Marktkapitalisierung</h2>
+                <p class="asset-classes-subtitle">Fläche der Kacheln ist proportional zur geschätzten Marktkapitalisierung (USD).</p>
+            </div>
+            <div id="assetTreemap" class="asset-treemap" role="img" aria-label="Treemap der globalen Assetklassen nach Marktkapitalisierung"></div>
+        </section>
+
+        <!-- Chart Section -->
+        <section class="section chart-section">
+            <div class="chart-header">
+                <h2>Chart</h2>
+                <div class="chart-controls">
+                    <button class="chart-btn" data-days="1">1T</button>
+                    <button class="chart-btn active" data-days="7">7T</button>
+                    <button class="chart-btn" data-days="30">30T</button>
+                    <button class="chart-btn" data-days="90">90T</button>
+                    <button class="chart-btn" data-days="365">1J</button>
+                    <button class="chart-btn" data-days="730">2J</button>
+                    <button class="chart-btn" data-days="1825">5J</button>
+                    <button class="chart-btn" data-days="3650">10J</button>
+                    <button class="chart-btn" data-days="max">Seit Start</button>
+                </div>
+                <div class="chart-controls scale-controls">
+                    <button class="chart-btn active" data-currency="eur">€</button>
+                    <button class="chart-btn" data-currency="usd">$</button>
+                    <button class="chart-btn active" data-scale="linear">Linear</button>
+                    <button class="chart-btn" data-scale="logarithmic">Log</button>
+                </div>
+                <div class="future-controls">
+                    <label for="futureDate">Modell bis:</label>
+                    <input type="date" id="futureDate">
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="btcChart"></canvas>
+            </div>
+            <div class="ma-controls" aria-label="Moving-Average-Auswahl">
+                <button class="ma-btn" data-ma="sma50d">50D</button>
+                <button class="ma-btn" data-ma="sma200d">200D</button>
+                <button class="ma-btn" data-ma="sma200w">200W</button>
+                <button class="ma-btn" data-ma="powerlaw">Power Law</button>
+            </div>
+        </section>
+
         <!-- Fundamental Indicators -->
         <section class="section indicators-section">
             <div class="indicators-header">
-                <h2 id="indicatorsTitle">Fundamentale Indikatoren (USD)</h2>
+                <h2 id="indicatorsTitle">Kurs-Indikatoren (USD)</h2>
                 <div class="kpi-currency-controls" aria-label="KPI-Währung auswählen">
                     <button class="chart-btn active" data-kpi-currency="usd">USD</button>
                     <button class="chart-btn" data-kpi-currency="eur">EUR</button>
@@ -193,51 +239,6 @@
             </div>
         </section>
 
-        <!-- Asset Classes Treemap -->
-        <section class="section asset-classes-section">
-            <div class="asset-classes-header">
-                <h2>Globale Assetklassen nach Marktkapitalisierung</h2>
-                <p class="asset-classes-subtitle">Fläche der Kacheln ist proportional zur geschätzten Marktkapitalisierung (USD).</p>
-            </div>
-            <div id="assetTreemap" class="asset-treemap" role="img" aria-label="Treemap der globalen Assetklassen nach Marktkapitalisierung"></div>
-        </section>
-
-        <!-- Chart Section -->
-        <section class="section chart-section">
-            <div class="chart-header">
-                <h2>Preisverlauf</h2>
-                <div class="chart-controls">
-                    <button class="chart-btn" data-days="1">1T</button>
-                    <button class="chart-btn active" data-days="7">7T</button>
-                    <button class="chart-btn" data-days="30">30T</button>
-                    <button class="chart-btn" data-days="90">90T</button>
-                    <button class="chart-btn" data-days="365">1J</button>
-                    <button class="chart-btn" data-days="730">2J</button>
-                    <button class="chart-btn" data-days="1825">5J</button>
-                    <button class="chart-btn" data-days="3650">10J</button>
-                    <button class="chart-btn" data-days="max">Seit Start</button>
-                </div>
-                <div class="chart-controls scale-controls">
-                    <button class="chart-btn active" data-currency="eur">€</button>
-                    <button class="chart-btn" data-currency="usd">$</button>
-                    <button class="chart-btn active" data-scale="linear">Linear</button>
-                    <button class="chart-btn" data-scale="logarithmic">Log</button>
-                </div>
-                <div class="future-controls">
-                    <label for="futureDate">Modell bis:</label>
-                    <input type="date" id="futureDate">
-                </div>
-            </div>
-            <div class="chart-container">
-                <canvas id="btcChart"></canvas>
-            </div>
-            <div class="ma-controls" aria-label="Moving-Average-Auswahl">
-                <button class="ma-btn" data-ma="sma50d">50D</button>
-                <button class="ma-btn" data-ma="sma200d">200D</button>
-                <button class="ma-btn" data-ma="sma200w">200W</button>
-                <button class="ma-btn" data-ma="powerlaw">Power Law</button>
-            </div>
-        </section>
 
         <!-- Treasury Companies Section (Placeholder) -->
         <section class="section treasury-section" style="display: none;">

@@ -119,7 +119,7 @@ body {
 }
 
 .price {
-    font-size: 3.5rem;
+    font-size: 2.3rem;
     font-weight: bold;
     color: var(--accent-orange);
 }
@@ -548,7 +548,7 @@ body {
     }
     
     .price {
-        font-size: 2.5rem;
+        font-size: 2rem;
     }
     
     .price-change {

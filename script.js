@@ -753,7 +753,7 @@ function setupKpiCurrencyControls() {
 
     const updateTitle = () => {
         if (indicatorsTitle) {
-            indicatorsTitle.textContent = `Fundamentale Indikatoren (${currentKpiCurrency.toUpperCase()})`;
+            indicatorsTitle.textContent = `Kurs-Indikatoren (${currentKpiCurrency.toUpperCase()})`;
         }
     };
 
