@@ -464,7 +464,8 @@ body {
 
 .asset-classes-subtitle {
     color: var(--text-secondary);
-    font-size: 0.92rem;
+    font-size: 1.06rem;
+    font-weight: 600;
 }
 
 .asset-treemap {
@@ -485,9 +486,16 @@ body {
     color: #fff;
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
     gap: 8px;
     overflow: hidden;
+}
+
+.asset-tile--tiny .asset-tile-name,
+.asset-tile--tiny .asset-tile-value {
+    display: none;
 }
 
 .asset-tile-name {
@@ -498,6 +506,41 @@ body {
 
 .asset-tile-value {
     font-size: clamp(0.78rem, 1.2vw, 1rem);
+    font-weight: 600;
+}
+
+.asset-callout {
+    position: absolute;
+    top: var(--callout-y, 50%);
+    left: var(--callout-label-x, 78%);
+    transform: translateY(-50%);
+    z-index: 2;
+    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.25;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.asset-callout::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: calc(100% + 8px);
+    width: var(--callout-line, 32px);
+    border-top: 2px solid rgba(255, 255, 255, 0.8);
+    transform: translateY(-50%);
+}
+
+.asset-callout-name {
+    display: block;
+}
+
+.asset-callout-value {
+    display: block;
+    font-size: 0.76rem;
     font-weight: 600;
 }
 
@@ -580,6 +623,14 @@ body {
 
     .asset-treemap {
         min-height: 600px;
+    }
+
+    .asset-callout {
+        font-size: 0.74rem;
+    }
+
+    .asset-callout-value {
+        font-size: 0.68rem;
     }
     
     .stats-grid,

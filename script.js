@@ -1399,12 +1399,19 @@ function renderAssetClassTreemap(runtimeData = {}) {
             `Total = ${formatEuroTrillion(totalEur)}, bear 10% BTC → ${formatScenarioPrice(bearPrice)}, realistisch 21% BTC → ${formatScenarioPrice(realisticPrice)}, bull 50% BTC → ${formatScenarioPrice(bullPrice)}`;
     }
 
-    container.innerHTML = layout
+    const tinyTileThreshold = 7;
+    const tinyTiles = [];
+
+    const tilesHtml = layout
         .map(({ asset, rect }) => {
             const valueLabel = formatUsdMarketCap(asset.marketCapUsd);
+            const isTinyTile = rect.width < tinyTileThreshold || rect.height < tinyTileThreshold;
+            if (isTinyTile) {
+                tinyTiles.push({ asset, rect, valueLabel });
+            }
             return `
                 <div
-                    class="asset-tile"
+                    class="asset-tile${isTinyTile ? ' asset-tile--tiny' : ''}"
                     style="left:${rect.x}%;top:${rect.y}%;width:${rect.width}%;height:${rect.height}%;background:${asset.color};"
                     title="${asset.name}: ${valueLabel}"
                 >
@@ -1414,6 +1421,31 @@ function renderAssetClassTreemap(runtimeData = {}) {
             `;
         })
         .join('');
+
+    const reservedLeft = 74;
+    const sortedTinyTiles = tinyTiles
+        .slice()
+        .sort((a, b) => (a.rect.y + a.rect.height / 2) - (b.rect.y + b.rect.height / 2));
+
+    const calloutsHtml = sortedTinyTiles
+        .map((entry, index, arr) => {
+            const spread = arr.length > 1 ? index / (arr.length - 1) : 0.5;
+            const targetY = Math.max(8, Math.min(92, 12 + spread * 76));
+            const lineLength = Math.max(10, reservedLeft - (entry.rect.x + entry.rect.width));
+            return `
+                <div
+                    class="asset-callout"
+                    style="--callout-y:${targetY.toFixed(2)}%;--callout-label-x:${reservedLeft}%;--callout-line:${lineLength.toFixed(2)}%;"
+                    title="${entry.asset.name}: ${entry.valueLabel}"
+                >
+                    <span class="asset-callout-name">${entry.asset.name}</span>
+                    <span class="asset-callout-value">${entry.valueLabel}</span>
+                </div>
+            `;
+        })
+        .join('');
+
+    container.innerHTML = tilesHtml + calloutsHtml;
 }
 
 function calculateScenarioBtcPrice(totalEur, btcShare, effectiveSupply) {
