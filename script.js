@@ -1381,7 +1381,9 @@ function renderAssetClassTreemap(runtimeData = {}) {
     }
 
     const sorted = [...assets].sort((a, b) => a.marketCapUsd - b.marketCapUsd);
-    const layout = computeTreemapLayout(sorted, { x: 0, y: 0, width: 100, height: 100 }, total);
+    const layout = rebalanceSmallestTiles(
+        computeTreemapLayout(sorted, { x: 0, y: 0, width: 100, height: 100 }, total)
+    );
 
     const eurPerUsd = Number.isFinite(runtimeData.bitcoinPriceUsd) && runtimeData.bitcoinPriceUsd > 0 && Number.isFinite(runtimeData.bitcoinPriceEur)
         ? runtimeData.bitcoinPriceEur / runtimeData.bitcoinPriceUsd
@@ -1400,15 +1402,11 @@ function renderAssetClassTreemap(runtimeData = {}) {
     }
 
     const tinyTileThreshold = 7;
-    const tinyTiles = [];
 
     const tilesHtml = layout
         .map(({ asset, rect }) => {
             const valueLabel = formatUsdMarketCap(asset.marketCapUsd);
             const isTinyTile = rect.width < tinyTileThreshold || rect.height < tinyTileThreshold;
-            if (isTinyTile) {
-                tinyTiles.push({ asset, rect, valueLabel });
-            }
             return `
                 <div
                     class="asset-tile${isTinyTile ? ' asset-tile--tiny' : ''}"
@@ -1422,30 +1420,46 @@ function renderAssetClassTreemap(runtimeData = {}) {
         })
         .join('');
 
-    const reservedLeft = 74;
-    const sortedTinyTiles = tinyTiles
-        .slice()
-        .sort((a, b) => (a.rect.y + a.rect.height / 2) - (b.rect.y + b.rect.height / 2));
+    container.innerHTML = tilesHtml;
+}
 
-    const calloutsHtml = sortedTinyTiles
-        .map((entry, index, arr) => {
-            const spread = arr.length > 1 ? index / (arr.length - 1) : 0.5;
-            const targetY = Math.max(8, Math.min(92, 12 + spread * 76));
-            const lineLength = Math.max(10, reservedLeft - (entry.rect.x + entry.rect.width));
-            return `
-                <div
-                    class="asset-callout"
-                    style="--callout-y:${targetY.toFixed(2)}%;--callout-label-x:${reservedLeft}%;--callout-line:${lineLength.toFixed(2)}%;"
-                    title="${entry.asset.name}: ${entry.valueLabel}"
-                >
-                    <span class="asset-callout-name">${entry.asset.name}</span>
-                    <span class="asset-callout-value">${entry.valueLabel}</span>
-                </div>
-            `;
-        })
-        .join('');
+function rebalanceSmallestTiles(layout) {
+    if (!Array.isArray(layout) || layout.length < 2) return layout;
 
-    container.innerHTML = tilesHtml + calloutsHtml;
+    const byArea = layout
+        .map((entry, index) => ({ index, entry, area: entry.rect.width * entry.rect.height }))
+        .sort((a, b) => a.area - b.area);
+
+    const first = byArea[0];
+    const second = byArea[1];
+    if (!first || !second) return layout;
+
+    const almostSameX = Math.abs(first.entry.rect.x - second.entry.rect.x) < 0.75
+        && Math.abs(first.entry.rect.width - second.entry.rect.width) < 0.75;
+    const almostSameY = Math.abs(first.entry.rect.y - second.entry.rect.y) < 0.75
+        && Math.abs(first.entry.rect.height - second.entry.rect.height) < 0.75;
+
+    if (almostSameY || !almostSameX) return layout;
+
+    const x = Math.min(first.entry.rect.x, second.entry.rect.x);
+    const y = Math.min(first.entry.rect.y, second.entry.rect.y);
+    const width = Math.max(first.entry.rect.x + first.entry.rect.width, second.entry.rect.x + second.entry.rect.width) - x;
+    const height = Math.max(first.entry.rect.y + first.entry.rect.height, second.entry.rect.y + second.entry.rect.height) - y;
+
+    const gap = Math.min(0.4, width * 0.03);
+    const tileWidth = (width - gap) / 2;
+
+    const reordered = [...layout];
+    reordered[first.index] = {
+        ...first.entry,
+        rect: { x, y, width: tileWidth, height }
+    };
+    reordered[second.index] = {
+        ...second.entry,
+        rect: { x: x + tileWidth + gap, y, width: tileWidth, height }
+    };
+
+    return reordered;
 }
 
 function calculateScenarioBtcPrice(totalEur, btcShare, effectiveSupply) {

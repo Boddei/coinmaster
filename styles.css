@@ -493,9 +493,19 @@ body {
     overflow: hidden;
 }
 
-.asset-tile--tiny .asset-tile-name,
+.asset-tile--tiny {
+    padding: 4px;
+    gap: 2px;
+}
+
+.asset-tile--tiny .asset-tile-name {
+    font-size: clamp(0.58rem, 0.9vw, 0.68rem);
+    line-height: 1.1;
+}
+
 .asset-tile--tiny .asset-tile-value {
-    display: none;
+    font-size: clamp(0.52rem, 0.8vw, 0.62rem);
+    line-height: 1.05;
 }
 
 .asset-tile-name {
@@ -512,7 +522,7 @@ body {
 .asset-callout {
     position: absolute;
     top: var(--callout-y, 50%);
-    left: var(--callout-label-x, 78%);
+    left: var(--callout-x, 78%);
     transform: translateY(-50%);
     z-index: 2;
     color: var(--text-primary);
