@@ -481,6 +481,7 @@ body {
     position: absolute;
     padding: 14px;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
     color: #fff;
     display: flex;
     flex-direction: column;
@@ -498,6 +499,12 @@ body {
 .asset-tile-value {
     font-size: clamp(0.78rem, 1.2vw, 1rem);
     font-weight: 600;
+}
+
+.asset-classes-source {
+    margin-top: 12px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
 }
 
 /* Loading */

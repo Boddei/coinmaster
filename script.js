@@ -9,7 +9,8 @@ const CONFIG = {
     refreshInterval: 60000, // 1 minute
     chartDays: 7,
     localPriceDbPath: 'data/btc_daily_prices.csv',
-    totalCoinsEver: 20999999.9769
+    totalCoinsEver: 20999999.9769,
+    estimatedLostCoins: 4_000_000
 };
 
 // Global state
@@ -204,7 +205,12 @@ function updateStats(data) {
     document.getElementById('volume24h').textContent = 
         formatLargeNumber(price.total_volume.eur) + ' €';
 
-    renderAssetClassTreemap(price.market_cap.usd);
+    renderAssetClassTreemap({
+        bitcoinMarketCapUsd: price.market_cap.usd,
+        bitcoinPriceEur: price.current_price.eur,
+        bitcoinPriceUsd: price.current_price.usd,
+        circulatingSupply: price.circulating_supply
+    });
 }
 
 async function updateNetworkStats(data) {
@@ -1357,14 +1363,15 @@ function showError(message) {
     // Could add a toast notification here
 }
 
-function renderAssetClassTreemap(bitcoinMarketCapUsd) {
+function renderAssetClassTreemap(runtimeData = {}) {
     const container = document.getElementById('assetTreemap');
+    const subtitle = document.getElementById('assetClassesScenarioSubtitle');
     if (!container) return;
 
     const assets = ASSET_CLASSES_BASE.map((asset) => ({ ...asset }));
-    if (Number.isFinite(bitcoinMarketCapUsd) && bitcoinMarketCapUsd > 0) {
+    if (Number.isFinite(runtimeData.bitcoinMarketCapUsd) && runtimeData.bitcoinMarketCapUsd > 0) {
         const bitcoinAsset = assets.find((asset) => asset.key === 'bitcoin');
-        if (bitcoinAsset) bitcoinAsset.marketCapUsd = bitcoinMarketCapUsd;
+        if (bitcoinAsset) bitcoinAsset.marketCapUsd = runtimeData.bitcoinMarketCapUsd;
     }
 
     const total = assets.reduce((sum, asset) => sum + asset.marketCapUsd, 0);
@@ -1373,8 +1380,24 @@ function renderAssetClassTreemap(bitcoinMarketCapUsd) {
         return;
     }
 
-    const sorted = [...assets].sort((a, b) => b.marketCapUsd - a.marketCapUsd);
+    const sorted = [...assets].sort((a, b) => a.marketCapUsd - b.marketCapUsd);
     const layout = computeTreemapLayout(sorted, { x: 0, y: 0, width: 100, height: 100 }, total);
+
+    const eurPerUsd = Number.isFinite(runtimeData.bitcoinPriceUsd) && runtimeData.bitcoinPriceUsd > 0 && Number.isFinite(runtimeData.bitcoinPriceEur)
+        ? runtimeData.bitcoinPriceEur / runtimeData.bitcoinPriceUsd
+        : null;
+    const totalEur = Number.isFinite(eurPerUsd) ? total * eurPerUsd : null;
+    const effectiveSupply = Number.isFinite(runtimeData.circulatingSupply)
+        ? runtimeData.circulatingSupply - CONFIG.estimatedLostCoins
+        : null;
+
+    if (subtitle) {
+        const bearPrice = calculateScenarioBtcPrice(totalEur, 0.10, effectiveSupply);
+        const realisticPrice = calculateScenarioBtcPrice(totalEur, 0.21, effectiveSupply);
+        const bullPrice = calculateScenarioBtcPrice(totalEur, 0.50, effectiveSupply);
+        subtitle.textContent =
+            `Total = ${formatEuroTrillion(totalEur)}, bear 10% BTC → ${formatScenarioPrice(bearPrice)}, realistisch 21% BTC → ${formatScenarioPrice(realisticPrice)}, bull 50% BTC → ${formatScenarioPrice(bullPrice)}`;
+    }
 
     container.innerHTML = layout
         .map(({ asset, rect }) => {
@@ -1391,6 +1414,23 @@ function renderAssetClassTreemap(bitcoinMarketCapUsd) {
             `;
         })
         .join('');
+}
+
+function calculateScenarioBtcPrice(totalEur, btcShare, effectiveSupply) {
+    if (!Number.isFinite(totalEur) || totalEur <= 0) return null;
+    if (!Number.isFinite(btcShare) || btcShare <= 0) return null;
+    if (!Number.isFinite(effectiveSupply) || effectiveSupply <= 0) return null;
+    return (btcShare * totalEur) / effectiveSupply;
+}
+
+function formatEuroTrillion(value) {
+    if (!Number.isFinite(value) || value <= 0) return '-';
+    return `${(value / 1e12).toFixed(1)} Bio.€`;
+}
+
+function formatScenarioPrice(value) {
+    if (!Number.isFinite(value) || value <= 0) return '-';
+    return formatCurrency(value, 'EUR');
 }
 
 function computeTreemapLayout(assets, rect, totalValue) {
