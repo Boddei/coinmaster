@@ -86,24 +86,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
     console.log('Bitcoin Dashboard initialisiert...');
+    prepareStagedSections();
     localPriceRowsPromise = ensureLocalPriceRows();
 
     // Setup controls immediately so UI can react while data streams in
     setupChartControls();
     setupKpiCurrencyControls();
     renderAssetClassTreemap();
-    await loadSmartMoneyDigest();
+
+    // Smart-Money bewusst nicht blockierend laden
+    loadSmartMoneyDigest().finally(() => {
+        revealSection('smart-money');
+    });
 
     // Stage 1: top KPIs first
     await loadBitcoinData();
+    revealSection('assets');
 
     // Stage 2 + 3: chart first, then calculations/indicators
     requestAnimationFrame(async () => {
         await localPriceRowsPromise;
         await loadChartData(currentChartDays);
+        revealSection('chart');
 
         setTimeout(async () => {
             await loadFundamentalIndicators();
+            revealSection('indicators');
         }, 0);
     });
     
@@ -119,6 +127,18 @@ async function initApp() {
     // Update last update time
     updateLastUpdateTime();
     setInterval(updateLastUpdateTime, 30000);
+}
+
+function prepareStagedSections() {
+    document.querySelectorAll('[data-stage]').forEach((section) => {
+        section.classList.add('section-staged');
+    });
+}
+
+function revealSection(stageName) {
+    const section = document.querySelector(`[data-stage="${stageName}"]`);
+    if (!section) return;
+    section.classList.add('is-visible');
 }
 
 // ============================================================================
