@@ -578,6 +578,43 @@ body {
     background: var(--accent-blue);
 }
 
+/* Treasury Section */
+.treasury-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.treasury-header h2 {
+    margin-bottom: 0;
+}
+
+.treasury-updated {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.treasury-grid .indicator-value {
+    font-size: 1.45rem;
+    margin-bottom: 8px;
+}
+
+.treasury-price-change {
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+
+.treasury-price-change.positive {
+    color: var(--green);
+}
+
+.treasury-price-change.negative {
+    color: var(--red);
+}
+
 /* Asset Classes Treemap */
 .asset-classes-header {
     display: flex;
