@@ -1077,11 +1077,15 @@ function setIndicatorLightState(elementId, state = 'neutral') {
     const light = document.getElementById(elementId);
     if (!light) return;
 
-    light.classList.remove('indicator-light--green', 'indicator-light--yellow', 'indicator-light--red');
+    light.classList.remove(
+        'indicator-traffic-light--green',
+        'indicator-traffic-light--yellow',
+        'indicator-traffic-light--red'
+    );
 
-    if (state === 'green') light.classList.add('indicator-light--green');
-    if (state === 'yellow') light.classList.add('indicator-light--yellow');
-    if (state === 'red') light.classList.add('indicator-light--red');
+    if (state === 'green') light.classList.add('indicator-traffic-light--green');
+    if (state === 'yellow') light.classList.add('indicator-traffic-light--yellow');
+    if (state === 'red') light.classList.add('indicator-traffic-light--red');
 }
 
 function getAmpelStateByThresholds(value, { greenMax, yellowMax }) {
