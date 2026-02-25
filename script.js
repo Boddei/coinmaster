@@ -1077,11 +1077,15 @@ function setIndicatorLightState(elementId, state = 'neutral') {
     const light = document.getElementById(elementId);
     if (!light) return;
 
-    light.classList.remove('indicator-light--green', 'indicator-light--yellow', 'indicator-light--red');
+    light.classList.remove(
+        'indicator-traffic-light--green',
+        'indicator-traffic-light--yellow',
+        'indicator-traffic-light--red'
+    );
 
-    if (state === 'green') light.classList.add('indicator-light--green');
-    if (state === 'yellow') light.classList.add('indicator-light--yellow');
-    if (state === 'red') light.classList.add('indicator-light--red');
+    if (state === 'green') light.classList.add('indicator-traffic-light--green');
+    if (state === 'yellow') light.classList.add('indicator-traffic-light--yellow');
+    if (state === 'red') light.classList.add('indicator-traffic-light--red');
 }
 
 function getAmpelStateByThresholds(value, { greenMax, yellowMax }) {
@@ -1103,16 +1107,16 @@ function calculateRsi(currency = 'usd') {
         const rsi14 = calculateRsiForPeriod(closes, 14);
         const rsi30 = calculateRsiForPeriod(closes, 30);
 
-        const latestRsi = rsi14;
-        const { signal } = getRsiInterpretation(latestRsi);
+        const weightedRsi = (rsi7 + (2 * rsi14) + rsi30) / 4;
+        const { signal } = getRsiInterpretation(weightedRsi);
 
-        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${latestRsi.toFixed(1)}</div>`;
+        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${weightedRsi.toFixed(1)}</div>`;
         document.getElementById('rsi7d').textContent = rsi7.toFixed(1);
         document.getElementById('rsi14d').textContent = rsi14.toFixed(1);
         document.getElementById('rsi30d').textContent = rsi30.toFixed(1);
         document.getElementById('rsiSignal').textContent = signal;
 
-        setIndicatorLightState('rsiLight', getAmpelStateByThresholds(latestRsi, { greenMax: 25, yellowMax: 75 }));
+        setIndicatorLightState('rsiLight', getAmpelStateByThresholds(weightedRsi, { greenMax: 25, yellowMax: 75 }));
 
     } catch (error) {
         console.error('Fehler bei RSI-Berechnung:', error);
