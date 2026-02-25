@@ -492,6 +492,71 @@ body {
     border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
+/* Smart Money Section */
+.smart-money-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.smart-money-header h2 {
+    margin-bottom: 0;
+}
+
+.smart-money-updated {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.smart-money-description {
+    color: var(--text-secondary);
+    margin-bottom: 18px;
+}
+
+.smart-money-list {
+    display: grid;
+    gap: 14px;
+}
+
+.smart-money-row {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.smart-money-row h3 {
+    color: var(--accent-orange);
+    margin-bottom: 8px;
+}
+
+.smart-money-row p {
+    margin-bottom: 10px;
+}
+
+.smart-money-links {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.smart-money-links a {
+    color: var(--accent-blue);
+    text-decoration: none;
+    font-size: 0.9rem;
+    border: 1px solid rgba(74, 158, 255, 0.45);
+    border-radius: 999px;
+    padding: 4px 10px;
+}
+
+.smart-money-links a:hover {
+    color: var(--bg-primary);
+    background: var(--accent-blue);
+}
+
 /* Asset Classes Treemap */
 .asset-classes-header {
     display: flex;
