@@ -10,7 +10,30 @@ const CONFIG = {
     chartDays: 7,
     localPriceDbPath: 'data/btc_daily_prices.csv',
     totalCoinsEver: 20999999.9769,
-    estimatedLostCoins: 4_000_000
+    estimatedLostCoins: 4_000_000,
+    treasuryCompanies: [
+        {
+            key: 'strategy',
+            displayName: 'Strategy',
+            quoteSymbol: 'MSTR',
+            aliases: ['strategy', 'microstrategy'],
+            fallbackBtcHoldings: 499226
+        },
+        {
+            key: 'metaplanet',
+            displayName: 'Metaplanet',
+            quoteSymbol: '3350.T',
+            aliases: ['metaplanet'],
+            fallbackBtcHoldings: 2235
+        },
+        {
+            key: 'capitalb',
+            displayName: 'Capital B',
+            quoteSymbol: 'CAPB.PA',
+            aliases: ['capital b', 'capitalb'],
+            fallbackBtcHoldings: null
+        }
+    ]
 };
 
 // Global state
@@ -23,6 +46,7 @@ let chartRequestId = 0;
 let localPriceRows = [];
 let localPriceRowsPromise = null;
 let projectionDate = '';
+let latestBitcoinPriceUsd = null;
 const maVisibility = {
     sma50d: false,
     sma200d: false,
@@ -99,6 +123,10 @@ async function initApp() {
         revealSection('smart-money');
     });
 
+    loadTreasuryCompanies().finally(() => {
+        revealSection('treasury');
+    });
+
     // Stage 1: top KPIs first
     await loadBitcoinData();
     revealSection('assets');
@@ -119,6 +147,7 @@ async function initApp() {
     setInterval(async () => {
         await loadBitcoinData();
         await loadFundamentalIndicators();
+        await loadTreasuryCompanies();
     }, CONFIG.refreshInterval);
 
     // Smart-Money-Update reicht täglich, wir pollen nur sehr selten neu
@@ -197,6 +226,7 @@ function updatePriceDisplay(data) {
     
     // USD price
     const usdPrice = price.current_price.usd;
+    latestBitcoinPriceUsd = Number.isFinite(usdPrice) ? usdPrice : latestBitcoinPriceUsd;
     document.getElementById('btcPriceUSD').textContent = 
         formatCurrency(usdPrice, 'USD');
     
@@ -1449,6 +1479,142 @@ function escapeHtml(value = '') {
     };
 
     return String(value).replace(/[&<>"']/g, (char) => htmlEscapes[char] || char);
+}
+
+
+async function loadTreasuryCompanies() {
+    try {
+        const [quoteResponse, treasuryResponse] = await Promise.all([
+            fetch(getYahooQuoteUrl(CONFIG.treasuryCompanies.map((company) => company.quoteSymbol))),
+            fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`)
+        ]);
+
+        if (!quoteResponse.ok) throw new Error(`Yahoo Quote API Fehler (${quoteResponse.status})`);
+        if (!treasuryResponse.ok) throw new Error(`CoinGecko Treasury API Fehler (${treasuryResponse.status})`);
+
+        const quotePayload = await quoteResponse.json();
+        const treasuryPayload = await treasuryResponse.json();
+
+        const quoteMap = mapQuotesBySymbol(quotePayload?.quoteResponse?.result || []);
+        const holdingsMap = mapHoldingsByName(treasuryPayload?.companies || []);
+
+        CONFIG.treasuryCompanies.forEach((company) => {
+            const quote = quoteMap.get(company.quoteSymbol.toUpperCase()) || null;
+            const holdings = resolveHoldings(holdingsMap, company);
+            renderTreasuryCompany(company, quote, holdings);
+        });
+
+        const updatedElement = document.getElementById('treasuryUpdated');
+        if (updatedElement) {
+            updatedElement.textContent = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+        }
+    } catch (error) {
+        console.error('Fehler beim Laden der Treasury-Unternehmen:', error);
+        renderTreasuryFallback();
+    }
+}
+
+function getYahooQuoteUrl(symbols = []) {
+    const encodedSymbols = symbols.join(',');
+    return `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(encodedSymbols)}`;
+}
+
+function mapQuotesBySymbol(quotes = []) {
+    const map = new Map();
+    quotes.forEach((quote) => {
+        const symbol = quote?.symbol;
+        if (typeof symbol !== 'string') return;
+        map.set(symbol.toUpperCase(), quote);
+    });
+    return map;
+}
+
+function mapHoldingsByName(companies = []) {
+    const map = new Map();
+    companies.forEach((company) => {
+        const normalizedName = normalizeCompanyName(company?.name || company?.symbol || '');
+        if (!normalizedName) return;
+        map.set(normalizedName, company);
+    });
+    return map;
+}
+
+function resolveHoldings(holdingsMap, companyConfig) {
+    const aliases = [companyConfig.displayName, ...(companyConfig.aliases || [])];
+    for (const alias of aliases) {
+        const normalized = normalizeCompanyName(alias);
+        if (!normalized) continue;
+        const entry = holdingsMap.get(normalized);
+        if (entry && Number.isFinite(entry.total_holdings)) {
+            return entry.total_holdings;
+        }
+    }
+
+    return Number.isFinite(companyConfig.fallbackBtcHoldings) ? companyConfig.fallbackBtcHoldings : null;
+}
+
+function normalizeCompanyName(value = '') {
+    return String(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+}
+
+function renderTreasuryCompany(company, quote, btcHoldings) {
+    const suffix = toDomSuffix(company.key);
+    const priceEl = document.getElementById(`treasuryPrice${suffix}`);
+    const btcEl = document.getElementById(`treasuryBtc${suffix}`);
+    const mnavEl = document.getElementById(`treasuryMnav${suffix}`);
+    if (!priceEl || !btcEl || !mnavEl) return;
+
+    const regularMarketPrice = Number(quote?.regularMarketPrice);
+    const changePercent = Number(quote?.regularMarketChangePercent);
+    const currency = quote?.currency || 'USD';
+
+    if (Number.isFinite(regularMarketPrice)) {
+        const priceLabel = formatCurrency(regularMarketPrice, currency);
+        const hasChange = Number.isFinite(changePercent);
+        const changeLabel = hasChange
+            ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`
+            : '-';
+        const changeClass = hasChange
+            ? `treasury-price-change ${changePercent >= 0 ? 'positive' : 'negative'}`
+            : 'treasury-price-change';
+
+        priceEl.innerHTML = `${priceLabel}<div class="${changeClass}">${changeLabel}</div>`;
+    } else {
+        priceEl.textContent = 'Nicht verfügbar';
+    }
+
+    btcEl.textContent = Number.isFinite(btcHoldings)
+        ? `${formatBtcAmount(btcHoldings)} BTC`
+        : 'Nicht verfügbar';
+
+    const marketCap = Number(quote?.marketCap);
+    const bitcoinNavUsd = Number.isFinite(btcHoldings) && Number.isFinite(latestBitcoinPriceUsd)
+        ? btcHoldings * latestBitcoinPriceUsd
+        : null;
+
+    const mnav = Number.isFinite(marketCap) && Number.isFinite(bitcoinNavUsd) && bitcoinNavUsd > 0
+        ? marketCap / bitcoinNavUsd
+        : null;
+
+    mnavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
+}
+
+function renderTreasuryFallback() {
+    CONFIG.treasuryCompanies.forEach((company) => {
+        renderTreasuryCompany(company, null, company.fallbackBtcHoldings);
+    });
+
+    const updatedElement = document.getElementById('treasuryUpdated');
+    if (updatedElement) {
+        updatedElement.textContent = 'Datenfeed nicht erreichbar';
+    }
+}
+
+function toDomSuffix(key = '') {
+    if (key === 'capitalb') return 'CapitalB';
+    return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 // ============================================================================

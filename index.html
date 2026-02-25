@@ -280,15 +280,6 @@
         </section>
 
 
-        <!-- Treasury Companies Section (Placeholder) -->
-        <section class="section treasury-section" style="display: none;">
-            <h2>Bitcoin Treasury Unternehmen</h2>
-            <div class="coming-soon">
-                <p>🚀 Demnächst verfügbar</p>
-                <p class="small">Strategy, MicroStrategy, Marathon Digital und mehr...</p>
-            </div>
-        </section>
-
         <!-- News Section (Placeholder) -->
         <section class="section news-section" style="display: none;">
             <h2>📰 Wichtige News & Events</h2>
@@ -306,6 +297,60 @@
             </div>
             <div id="assetTreemap" class="asset-treemap" role="img" aria-label="Treemap der globalen Assetklassen nach Marktkapitalisierung"></div>
             <p class="asset-classes-source">Quellen: BTC-Marktkapitalisierung/Preis/Umlaufmenge live via CoinGecko; übrige Assetklassen als statische Makro-Schätzwerte im Code hinterlegt.</p>
+        </section>
+
+        <!-- Treasury Companies -->
+        <section class="section treasury-section" data-stage="treasury">
+            <div class="treasury-header">
+                <h2>Treasuries</h2>
+                <p class="treasury-updated">Stand: <span id="treasuryUpdated">-</span></p>
+            </div>
+            <div class="indicators-grid treasury-grid">
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Strategy</h3>
+                    </div>
+                    <div class="indicator-value" id="treasuryPriceStrategy">Lädt...</div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">BTC Menge:</span>
+                        <span class="detail-value" id="treasuryBtcStrategy">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Aktuelle mNAV:</span>
+                        <span class="detail-value" id="treasuryMnavStrategy">-</span>
+                    </div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Metaplanet</h3>
+                    </div>
+                    <div class="indicator-value" id="treasuryPriceMetaplanet">Lädt...</div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">BTC Menge:</span>
+                        <span class="detail-value" id="treasuryBtcMetaplanet">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Aktuelle mNAV:</span>
+                        <span class="detail-value" id="treasuryMnavMetaplanet">-</span>
+                    </div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-header">
+                        <h3>Capital B</h3>
+                    </div>
+                    <div class="indicator-value" id="treasuryPriceCapitalB">Lädt...</div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">BTC Menge:</span>
+                        <span class="detail-value" id="treasuryBtcCapitalB">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Aktuelle mNAV:</span>
+                        <span class="detail-value" id="treasuryMnavCapitalB">-</span>
+                    </div>
+                </div>
+            </div>
         </section>
 
         <!-- Footer -->
