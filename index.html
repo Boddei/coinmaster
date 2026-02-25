@@ -81,7 +81,7 @@
         </section>
 
         <!-- Chart Section -->
-        <section class="section chart-section">
+        <section class="section chart-section" data-stage="chart">
             <div class="chart-header">
                 <h2>Chart</h2>
                 <div class="chart-controls">
@@ -118,7 +118,7 @@
         </section>
 
         <!-- Fundamental Indicators -->
-        <section class="section indicators-section">
+        <section class="section indicators-section" data-stage="indicators">
             <div class="indicators-header">
                 <h2 id="indicatorsTitle">Kurs-Indikatoren (USD)</h2>
                 <div class="kpi-currency-controls" aria-label="KPI-Währung auswählen">
@@ -255,14 +255,11 @@
         </section>
         
         <!-- Smart Money Section -->
-        <section class="section smart-money-section">
+        <section class="section smart-money-section" data-stage="smart-money">
             <div class="smart-money-header">
                 <h2>Smart Money</h2>
                 <p class="smart-money-updated">Stand: <span id="smartMoneyUpdated">-</span></p>
             </div>
-            <p class="smart-money-description">
-                Tägliche KI-Zusammenfassung der Positionierung von Marktteilnehmern (Whales, Hedge Funds, ETFs) inklusive Quellenlinks.
-            </p>
             <div class="smart-money-list">
                 <div class="smart-money-row">
                     <h3>Whales:</h3>
@@ -302,7 +299,7 @@
         </section>
 
         <!-- Asset Classes Treemap -->
-        <section class="section asset-classes-section">
+        <section class="section asset-classes-section" data-stage="assets">
             <div class="asset-classes-header">
                 <h2>Globale Asset-Marktkapitalisierung</h2>
                 <p class="asset-classes-subtitle" id="assetClassesScenarioSubtitle">Total = -, bear 10% BTC → -, realistisch 21% BTC → -, bull 50% BTC → -</p>

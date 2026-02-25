@@ -98,6 +98,27 @@ body {
     gap: 8px;
 }
 
+
+.section-staged {
+    display: none;
+}
+
+.section-staged.is-visible {
+    display: block;
+    animation: sectionFadeIn 0.35s ease;
+}
+
+@keyframes sectionFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Price Section */
 .price-section {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
