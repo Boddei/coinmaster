@@ -1107,16 +1107,16 @@ function calculateRsi(currency = 'usd') {
         const rsi14 = calculateRsiForPeriod(closes, 14);
         const rsi30 = calculateRsiForPeriod(closes, 30);
 
-        const latestRsi = rsi14;
-        const { signal } = getRsiInterpretation(latestRsi);
+        const weightedRsi = (rsi7 + (2 * rsi14) + rsi30) / 4;
+        const { signal } = getRsiInterpretation(weightedRsi);
 
-        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${latestRsi.toFixed(1)}</div>`;
+        document.getElementById('rsiValue').innerHTML = `<div style="font-size: 1.5rem;">${weightedRsi.toFixed(1)}</div>`;
         document.getElementById('rsi7d').textContent = rsi7.toFixed(1);
         document.getElementById('rsi14d').textContent = rsi14.toFixed(1);
         document.getElementById('rsi30d').textContent = rsi30.toFixed(1);
         document.getElementById('rsiSignal').textContent = signal;
 
-        setIndicatorLightState('rsiLight', getAmpelStateByThresholds(latestRsi, { greenMax: 25, yellowMax: 75 }));
+        setIndicatorLightState('rsiLight', getAmpelStateByThresholds(weightedRsi, { greenMax: 25, yellowMax: 75 }));
 
     } catch (error) {
         console.error('Fehler bei RSI-Berechnung:', error);
