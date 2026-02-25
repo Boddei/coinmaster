@@ -36,3 +36,39 @@ node scripts/update-price-db.mjs
 2. Automatisch via GitHub Actions:
 - Workflow: `.github/workflows/update-price-db.yml`
 - Läuft täglich (Cron) und commitet/pusht neue Zeilen automatisch.
+
+
+## Smart Money (Whales / Hedge Funds / ETFs)
+
+Die Website enthält einen zusätzlichen Abschnitt **"Smart Money"** mit 3 kompakten Zeilen:
+
+- Whales
+- Hedge Funds
+- ETFs
+
+Dazu werden jeweils 1-2 Sätze plus 1-2 Quellenlinks aus `data/smart_money.json` angezeigt.
+
+### Tägliches Update via LLM
+
+Manuell aktualisieren:
+
+```bash
+node scripts/update-smart-money.mjs
+```
+
+Benötigte Umgebungsvariablen:
+
+- `OPENAI_API_KEY` (erforderlich für LLM-Aufruf)
+- `OPENAI_MODEL` (optional, Default: `gpt-4o-mini`)
+- `OPENAI_BASE_URL` (optional, Default: `https://api.openai.com/v1`)
+
+Ablauf des Skripts:
+
+1. Holt aktuelle Artikel aus Google News RSS für Whales/Hedge Funds/ETFs.
+2. Fragt ein LLM nach einer neutralen 1-2-Satz-Zusammenfassung pro Kategorie.
+3. Schreibt das Ergebnis in `data/smart_money.json`.
+
+Automatisch via GitHub Actions:
+
+- Workflow: `.github/workflows/update-smart-money.yml`
+- Läuft täglich und committed Änderungen an `data/smart_money.json`.

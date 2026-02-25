@@ -1,0 +1,49 @@
+{
+  "updatedAt": "2026-02-25T07:21:26.006Z",
+  "meta": {
+    "generator": "fallback_existing_data",
+    "model": "gpt-4o-mini",
+    "notes": "OPENAI_API_KEY fehlt oder LLM-Update fehlgeschlagen. Vorherige Daten bleiben erhalten."
+  },
+  "segments": {
+    "whales": {
+      "summary": "On-Chain-Daten deuten zuletzt auf selektive Akkumulation großer Wallets hin, vor allem bei Rücksetzern. Gleichzeitig bleiben kurzfristige Gewinnmitnahmen bei starken Rallyes sichtbar.",
+      "links": [
+        {
+          "title": "Glassnode Insights: Bitcoin Accumulation Trend",
+          "url": "https://insights.glassnode.com/"
+        },
+        {
+          "title": "CryptoQuant: Exchange Flows & Whale Activity",
+          "url": "https://cryptoquant.com/insights"
+        }
+      ]
+    },
+    "hedgeFunds": {
+      "summary": "Hedge Funds wirken aktuell überwiegend taktisch positioniert: stärkeres Interesse an Basis-/Arbitrage-Setups, aber keine eindeutige breite Risk-On-Überzeugung. Die Positionierung schwankt sichtbar mit Makro- und Zinsdaten.",
+      "links": [
+        {
+          "title": "CoinShares: Digital Asset Fund Flows",
+          "url": "https://coinshares.com/research/digital-asset-fund-flows"
+        },
+        {
+          "title": "The Block: Institutional Crypto Coverage",
+          "url": "https://www.theblock.co/"
+        }
+      ]
+    },
+    "etfs": {
+      "summary": "US-Spot-Bitcoin-ETFs bleiben ein zentraler Treiber: anhaltende Nettozuflüsse sprechen für strukturelle Nachfrage, kurzfristige Abflüsse treten aber in volatilen Phasen weiterhin auf.",
+      "links": [
+        {
+          "title": "SoSoValue: Spot ETF Daily Flows",
+          "url": "https://www.sosovalue.com/assets/etf/us-btc-spot"
+        },
+        {
+          "title": "Farside Investors: Bitcoin ETF Flow Data",
+          "url": "https://farside.co.uk/"
+        }
+      ]
+    }
+  }
+}

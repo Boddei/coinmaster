@@ -92,6 +92,7 @@ async function initApp() {
     setupChartControls();
     setupKpiCurrencyControls();
     renderAssetClassTreemap();
+    await loadSmartMoneyDigest();
 
     // Stage 1: top KPIs first
     await loadBitcoinData();
@@ -111,6 +112,9 @@ async function initApp() {
         await loadBitcoinData();
         await loadFundamentalIndicators();
     }, CONFIG.refreshInterval);
+
+    // Smart-Money-Update reicht täglich, wir pollen nur sehr selten neu
+    setInterval(loadSmartMoneyDigest, 60 * 60 * 1000);
     
     // Update last update time
     updateLastUpdateTime();
@@ -1341,6 +1345,90 @@ function getPowerLawFactor(row, currency = 'usd') {
 
     if (!Number.isFinite(price) || !Number.isFinite(q01) || !Number.isFinite(q99) || q99 === q01) return null;
     return (price - q01) / (q99 - q01);
+}
+
+async function loadSmartMoneyDigest() {
+    try {
+        const response = await fetch('data/smart_money.json', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`Smart-Money-Daten nicht erreichbar (${response.status})`);
+
+        const payload = await response.json();
+        renderSmartMoneyDigest(payload);
+    } catch (error) {
+        console.error('Fehler beim Laden von Smart Money:', error);
+        renderSmartMoneyDigest(null);
+    }
+}
+
+function renderSmartMoneyDigest(payload) {
+    const defaults = {
+        whales: {
+            summary: 'Keine aktuellen Daten verfügbar.',
+            links: []
+        },
+        hedgeFunds: {
+            summary: 'Keine aktuellen Daten verfügbar.',
+            links: []
+        },
+        etfs: {
+            summary: 'Keine aktuellen Daten verfügbar.',
+            links: []
+        }
+    };
+
+    const data = {
+        ...defaults,
+        ...(payload?.segments ?? {})
+    };
+
+    const updatedLabel = payload?.updatedAt
+        ? new Date(payload.updatedAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })
+        : 'Unbekannt';
+
+    const updatedElement = document.getElementById('smartMoneyUpdated');
+    if (updatedElement) {
+        const modelText = payload?.meta?.model ? ` (LLM: ${payload.meta.model})` : '';
+        updatedElement.textContent = `${updatedLabel}${modelText}`;
+    }
+
+    updateSmartMoneyRow('smartMoneyWhales', 'smartMoneyWhalesLinks', data.whales);
+    updateSmartMoneyRow('smartMoneyHedgeFunds', 'smartMoneyHedgeFundsLinks', data.hedgeFunds);
+    updateSmartMoneyRow('smartMoneyEtfs', 'smartMoneyEtfsLinks', data.etfs);
+}
+
+function updateSmartMoneyRow(textId, linksId, rowData = {}) {
+    const textEl = document.getElementById(textId);
+    const linksEl = document.getElementById(linksId);
+
+    if (textEl) {
+        textEl.textContent = rowData.summary || 'Keine aktuellen Daten verfügbar.';
+    }
+
+    if (!linksEl) return;
+
+    const links = Array.isArray(rowData.links) ? rowData.links.slice(0, 2) : [];
+    if (links.length === 0) {
+        linksEl.innerHTML = '<span class="detail-label">Keine Quellen verlinkt.</span>';
+        return;
+    }
+
+    linksEl.innerHTML = links.map((link) => {
+        const title = escapeHtml(link?.title || 'Quelle');
+        const href = typeof link?.url === 'string' ? link.url : '#';
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a>`;
+    }).join('');
+}
+
+function escapeHtml(value = '') {
+    const htmlEscapes = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    };
+
+    return String(value).replace(/[&<>"']/g, (char) => htmlEscapes[char] || char);
 }
 
 // ============================================================================
