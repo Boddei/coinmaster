@@ -18,6 +18,8 @@ const CONFIG = {
             quoteSymbol: 'MSTR',
             aliases: ['strategy', 'microstrategy'],
             fallbackBtcHoldings: 499226,
+            fallbackSharesOutstanding: 20_900_000,
+            btcPerShare1yAgo: 0.0175,
             sourceUrl: 'https://www.strategy.com/'
         },
         {
@@ -26,6 +28,8 @@ const CONFIG = {
             quoteSymbol: '3350.T',
             aliases: ['metaplanet'],
             fallbackBtcHoldings: 2235,
+            fallbackSharesOutstanding: 539_200_000,
+            btcPerShare1yAgo: 0.00000078,
             sourceUrl: 'https://analytics.metaplanet.jp/?tab=home'
         },
         {
@@ -34,6 +38,8 @@ const CONFIG = {
             quoteSymbol: 'CAPB.PA',
             aliases: ['capital b', 'capitalb'],
             fallbackBtcHoldings: null,
+            fallbackSharesOutstanding: 2_930_000,
+            btcPerShare1yAgo: 0.00008,
             sourceUrl: 'https://cptlb.com/analytics/'
         }
     ]
@@ -1496,16 +1502,24 @@ function escapeHtml(value = '') {
 
 async function loadTreasuryCompanies() {
     try {
-        const [quoteResponse, treasuryResponse] = await Promise.all([
+        const [quoteResult, treasuryResult] = await Promise.allSettled([
             fetch(getYahooQuoteUrl(CONFIG.treasuryCompanies.map((company) => company.quoteSymbol))),
             fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`)
         ]);
 
-        if (!quoteResponse.ok) throw new Error(`Yahoo Quote API Fehler (${quoteResponse.status})`);
-        if (!treasuryResponse.ok) throw new Error(`CoinGecko Treasury API Fehler (${treasuryResponse.status})`);
+        const quoteResponse = quoteResult.status === 'fulfilled' ? quoteResult.value : null;
+        const treasuryResponse = treasuryResult.status === 'fulfilled' ? treasuryResult.value : null;
 
-        const quotePayload = await quoteResponse.json();
-        const treasuryPayload = await treasuryResponse.json();
+        if (quoteResult.status === 'rejected') {
+            console.warn('Yahoo Quote API nicht erreichbar:', quoteResult.reason);
+        }
+
+        if (treasuryResult.status === 'rejected') {
+            console.warn('CoinGecko Treasury API nicht erreichbar:', treasuryResult.reason);
+        }
+
+        const quotePayload = (quoteResponse && quoteResponse.ok) ? await quoteResponse.json() : null;
+        const treasuryPayload = (treasuryResponse && treasuryResponse.ok) ? await treasuryResponse.json() : null;
 
         const quoteMap = mapQuotesBySymbol(quotePayload?.quoteResponse?.result || []);
         const holdingsMap = mapHoldingsByName(treasuryPayload?.companies || []);
@@ -1575,9 +1589,10 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
     const suffix = toDomSuffix(company.key);
     const priceEl = document.getElementById(`treasuryPrice${suffix}`);
     const btcEl = document.getElementById(`treasuryBtc${suffix}`);
-    const mnavEl = document.getElementById(`treasuryMnav${suffix}`);
-    const sourceEl = document.getElementById(`treasurySource${suffix}`);
-    if (!priceEl || !btcEl || !mnavEl || !sourceEl) return;
+    const nmavEl = document.getElementById(`treasuryNmav${suffix}`);
+    const amplificationEl = document.getElementById(`treasuryAmplification${suffix}`);
+    const yieldEl = document.getElementById(`treasuryYield${suffix}`);
+    if (!priceEl || !btcEl || !nmavEl || !amplificationEl || !yieldEl) return;
 
     const regularMarketPrice = Number(quote?.regularMarketPrice);
     const changePercent = Number(quote?.regularMarketChangePercent);
@@ -1611,12 +1626,30 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
         ? marketCap / bitcoinNavUsd
         : null;
 
-    mnavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
+    nmavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
 
-    const safeUrl = typeof company.sourceUrl === 'string' ? company.sourceUrl : '';
-    sourceEl.innerHTML = safeUrl
-        ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl.replace(/^https?:\/\//, '')}</a>`
-        : '-';
+    const sharesOutstanding = Number.isFinite(Number(quote?.sharesOutstanding))
+        ? Number(quote.sharesOutstanding)
+        : company.fallbackSharesOutstanding;
+    const btcPerShare = Number.isFinite(btcHoldings) && Number.isFinite(sharesOutstanding) && sharesOutstanding > 0
+        ? btcHoldings / sharesOutstanding
+        : null;
+    const btcPerShare1yAgo = Number(company.btcPerShare1yAgo);
+    const btcYield = Number.isFinite(btcPerShare) && Number.isFinite(btcPerShare1yAgo) && btcPerShare1yAgo > 0
+        ? ((btcPerShare / btcPerShare1yAgo) - 1) * 100
+        : null;
+
+    if (Number.isFinite(btcYield)) {
+        const yieldClass = btcYield >= 0 ? 'positive' : 'negative';
+        yieldEl.innerHTML = `<span class="treasury-price-change ${yieldClass}">${btcYield >= 0 ? '+' : ''}${btcYield.toFixed(1)}%</span>`;
+    } else {
+        yieldEl.textContent = 'Nicht verfügbar';
+    }
+
+    const amplification = Number.isFinite(mnav) && Number.isFinite(btcYield)
+        ? mnav * (1 + (btcYield / 100))
+        : null;
+    amplificationEl.textContent = Number.isFinite(amplification) ? `${amplification.toFixed(2)}x` : 'Nicht verfügbar';
 }
 
 function renderTreasuryFallback() {
