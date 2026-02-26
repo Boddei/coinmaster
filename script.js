@@ -17,21 +17,24 @@ const CONFIG = {
             displayName: 'Strategy',
             quoteSymbol: 'MSTR',
             aliases: ['strategy', 'microstrategy'],
-            fallbackBtcHoldings: 499226
+            fallbackBtcHoldings: 499226,
+            sourceUrl: 'https://www.strategy.com/'
         },
         {
             key: 'metaplanet',
             displayName: 'Metaplanet',
             quoteSymbol: '3350.T',
             aliases: ['metaplanet'],
-            fallbackBtcHoldings: 2235
+            fallbackBtcHoldings: 2235,
+            sourceUrl: 'https://analytics.metaplanet.jp/?tab=home'
         },
         {
             key: 'capitalb',
             displayName: 'Capital B',
             quoteSymbol: 'CAPB.PA',
             aliases: ['capital b', 'capitalb'],
-            fallbackBtcHoldings: null
+            fallbackBtcHoldings: null,
+            sourceUrl: 'https://cptlb.com/analytics/'
         }
     ]
 };
@@ -129,6 +132,7 @@ async function initApp() {
 
     // Stage 1: top KPIs first
     await loadBitcoinData();
+    revealSection('price');
     revealSection('assets');
 
     // Stage 2 + 3: chart first, then calculations/indicators
@@ -160,13 +164,21 @@ async function initApp() {
 
 function prepareStagedSections() {
     document.querySelectorAll('[data-stage]').forEach((section) => {
-        section.classList.add('section-staged');
+        section.classList.add('section-staged', 'is-loading');
+        if (!section.querySelector('.section-loader')) {
+            const loader = document.createElement('div');
+            loader.className = 'section-loader';
+            loader.innerHTML = '<span class="section-loader-icon" aria-hidden="true">₿</span>';
+            loader.setAttribute('aria-label', 'Ladeindikator');
+            section.appendChild(loader);
+        }
     });
 }
 
 function revealSection(stageName) {
     const section = document.querySelector(`[data-stage="${stageName}"]`);
     if (!section) return;
+    section.classList.remove('is-loading');
     section.classList.add('is-visible');
 }
 
@@ -1564,7 +1576,8 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
     const priceEl = document.getElementById(`treasuryPrice${suffix}`);
     const btcEl = document.getElementById(`treasuryBtc${suffix}`);
     const mnavEl = document.getElementById(`treasuryMnav${suffix}`);
-    if (!priceEl || !btcEl || !mnavEl) return;
+    const sourceEl = document.getElementById(`treasurySource${suffix}`);
+    if (!priceEl || !btcEl || !mnavEl || !sourceEl) return;
 
     const regularMarketPrice = Number(quote?.regularMarketPrice);
     const changePercent = Number(quote?.regularMarketChangePercent);
@@ -1599,6 +1612,11 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
         : null;
 
     mnavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
+
+    const safeUrl = typeof company.sourceUrl === 'string' ? company.sourceUrl : '';
+    sourceEl.innerHTML = safeUrl
+        ? `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${safeUrl.replace(/^https?:\/\//, '')}</a>`
+        : '-';
 }
 
 function renderTreasuryFallback() {

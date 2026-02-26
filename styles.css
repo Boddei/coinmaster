@@ -73,6 +73,7 @@ body {
     padding: 30px;
     margin-bottom: 30px;
     border: 1px solid var(--border);
+    position: relative;
 }
 
 .section h2 {
@@ -99,13 +100,39 @@ body {
 }
 
 
-.section-staged {
-    display: none;
+.section-staged.is-visible {
+    animation: sectionFadeIn 0.35s ease;
 }
 
-.section-staged.is-visible {
-    display: block;
-    animation: sectionFadeIn 0.35s ease;
+.section-loader {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 26px;
+    height: 26px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid rgba(247, 147, 26, 0.45);
+    background: rgba(15, 15, 15, 0.8);
+}
+
+.section-staged.is-loading .section-loader {
+    display: flex;
+}
+
+.section-loader-icon {
+    color: var(--accent-orange);
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1;
+    animation: spinBitcoin 0.9s linear infinite;
+}
+
+@keyframes spinBitcoin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 @keyframes sectionFadeIn {
