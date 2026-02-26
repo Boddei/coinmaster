@@ -19,7 +19,10 @@ const CONFIG = {
             aliases: ['strategy', 'microstrategy'],
             fallbackBtcHoldings: 499226,
             fallbackSharesOutstanding: 20_900_000,
-            btcPerShare1yAgo: 0.0175,
+            satsPerShare1yAgo: 1_750_000,
+            satsPerShareNow: null,
+            fallbackNmav: null,
+            fallbackAmplification: null,
             sourceUrl: 'https://www.strategy.com/'
         },
         {
@@ -29,7 +32,10 @@ const CONFIG = {
             aliases: ['metaplanet'],
             fallbackBtcHoldings: 2235,
             fallbackSharesOutstanding: 539_200_000,
-            btcPerShare1yAgo: 0.00000078,
+            satsPerShare1yAgo: 78,
+            satsPerShareNow: null,
+            fallbackNmav: null,
+            fallbackAmplification: null,
             sourceUrl: 'https://analytics.metaplanet.jp/?tab=home'
         },
         {
@@ -39,7 +45,10 @@ const CONFIG = {
             aliases: ['capital b', 'capitalb'],
             fallbackBtcHoldings: null,
             fallbackSharesOutstanding: 2_930_000,
-            btcPerShare1yAgo: 0.00008,
+            satsPerShare1yAgo: 8_000,
+            satsPerShareNow: null,
+            fallbackNmav: null,
+            fallbackAmplification: null,
             sourceUrl: 'https://cptlb.com/analytics/'
         }
     ]
@@ -76,7 +85,8 @@ const ASSET_CLASSES_BASE = [
     { key: 'sovereignBonds', name: 'Anleihen (Staat)', marketCapUsd: 85e12, color: '#8b5cf6' },
     { key: 'corporateBonds', name: 'Anleihen (Unternehmen)', marketCapUsd: 45e12, color: '#a855f7' },
     { key: 'cash', name: 'Cash (M2, global)', marketCapUsd: 110e12, color: '#16a34a' },
-    { key: 'preciousMetals', name: 'Edelmetalle', marketCapUsd: 18e12, color: '#d4af37' },
+    // Gold + Silber (companiesmarketcap.com/assets-by-market-cap)
+    { key: 'preciousMetals', name: 'Gold + Silber', marketCapUsd: 38e12, color: '#d4af37' },
     { key: 'art', name: 'Kunst', marketCapUsd: 2.2e12, color: '#ec4899' },
     { key: 'bitcoin', name: 'Bitcoin', marketCapUsd: 2.1e12, color: '#f7931a' }
 ];
@@ -1617,26 +1627,35 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
         ? `${formatBtcAmount(btcHoldings)} BTC`
         : 'Nicht verfügbar';
 
-    const marketCap = Number(quote?.marketCap);
+    const sharesOutstanding = Number.isFinite(Number(quote?.sharesOutstanding))
+        ? Number(quote.sharesOutstanding)
+        : company.fallbackSharesOutstanding;
+    const marketCapFromShares = Number.isFinite(regularMarketPrice) && Number.isFinite(sharesOutstanding) && sharesOutstanding > 0
+        ? regularMarketPrice * sharesOutstanding
+        : null;
+    const marketCap = Number.isFinite(Number(quote?.marketCap))
+        ? Number(quote.marketCap)
+        : marketCapFromShares;
     const bitcoinNavUsd = Number.isFinite(btcHoldings) && Number.isFinite(latestBitcoinPriceUsd)
         ? btcHoldings * latestBitcoinPriceUsd
         : null;
 
-    const mnav = Number.isFinite(marketCap) && Number.isFinite(bitcoinNavUsd) && bitcoinNavUsd > 0
+    const computedMnav = Number.isFinite(marketCap) && Number.isFinite(bitcoinNavUsd) && bitcoinNavUsd > 0
         ? marketCap / bitcoinNavUsd
         : null;
+    const mnav = Number.isFinite(computedMnav) ? computedMnav : Number(company.fallbackNmav);
 
     nmavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
 
-    const sharesOutstanding = Number.isFinite(Number(quote?.sharesOutstanding))
-        ? Number(quote.sharesOutstanding)
-        : company.fallbackSharesOutstanding;
     const btcPerShare = Number.isFinite(btcHoldings) && Number.isFinite(sharesOutstanding) && sharesOutstanding > 0
         ? btcHoldings / sharesOutstanding
         : null;
-    const btcPerShare1yAgo = Number(company.btcPerShare1yAgo);
-    const btcYield = Number.isFinite(btcPerShare) && Number.isFinite(btcPerShare1yAgo) && btcPerShare1yAgo > 0
-        ? ((btcPerShare / btcPerShare1yAgo) - 1) * 100
+    const satsPerShareNow = Number.isFinite(Number(company.satsPerShareNow))
+        ? Number(company.satsPerShareNow)
+        : (Number.isFinite(btcPerShare) ? btcPerShare * 100_000_000 : null);
+    const satsPerShare1yAgo = Number(company.satsPerShare1yAgo);
+    const btcYield = Number.isFinite(satsPerShareNow) && Number.isFinite(satsPerShare1yAgo) && satsPerShare1yAgo > 0
+        ? ((satsPerShareNow / satsPerShare1yAgo) - 1) * 100
         : null;
 
     if (Number.isFinite(btcYield)) {
@@ -1646,9 +1665,10 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
         yieldEl.textContent = 'Nicht verfügbar';
     }
 
-    const amplification = Number.isFinite(mnav) && Number.isFinite(btcYield)
+    const computedAmplification = Number.isFinite(mnav) && Number.isFinite(btcYield)
         ? mnav * (1 + (btcYield / 100))
         : null;
+    const amplification = Number.isFinite(computedAmplification) ? computedAmplification : Number(company.fallbackAmplification);
     amplificationEl.textContent = Number.isFinite(amplification) ? `${amplification.toFixed(2)}x` : 'Nicht verfügbar';
 }
 
