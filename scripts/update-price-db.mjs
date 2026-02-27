@@ -4,6 +4,7 @@ const DB_PATH = 'data/btc_daily_prices.csv';
 const POWERLAW_START_DATE = '2010-07-18';
 const COIN = 'bitcoin';
 const API_BASE = 'https://api.coingecko.com/api/v3';
+const GOLD_API_BASE = 'https://fsapi.gold.org/api/goldprice/v13/chart/price';
 const GENESIS_DATE = '2009-01-03';
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const POWERLAW_SEEDS = {
@@ -39,6 +40,27 @@ async function fetchRange(vsCurrency, fromDate) {
   return data.prices ?? [];
 }
 
+async function fetchGoldDailyCloseUsd(fromDate) {
+  const startMs = new Date(`${fromDate}T00:00:00Z`).getTime();
+  const endMs = Date.now();
+  const url = `${GOLD_API_BASE}/usd/oz/${startMs},${endMs}?cache09092024`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Gold API Fehler: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const points = data?.chartData?.USD ?? [];
+  const byDay = new Map();
+
+  for (const [timestamp, price] of points) {
+    byDay.set(isoDate(timestamp), Number(price));
+  }
+
+  return byDay;
+}
+
 function pickDailyClose(points) {
   const byDay = new Map();
   for (const [timestamp, price] of points) {
@@ -53,9 +75,20 @@ async function loadExistingRows() {
     const rows = csv.trim().split('\n');
     if (rows.length <= 1) return [];
 
+    const header = rows[0].split(',');
+    const idxDate = header.indexOf('date');
+    const idxEur = header.indexOf('close_eur');
+    const idxUsd = header.indexOf('close_usd');
+    const idxGld = header.indexOf('close_gld');
+
     return rows.slice(1).map((line) => {
-      const [date, closeEur, closeUsd] = line.split(',');
-      return { date, closeEur: Number(closeEur), closeUsd: Number(closeUsd) };
+      const values = line.split(',');
+      return {
+        date: values[idxDate],
+        closeEur: Number(values[idxEur]),
+        closeUsd: Number(values[idxUsd]),
+        closeGld: idxGld >= 0 ? Number(values[idxGld]) : NaN
+      };
     }).filter((row) => row.date && Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
   } catch {
     return [];
@@ -172,11 +205,13 @@ async function main() {
 
   let eurPoints = [];
   let usdPoints = [];
+  let goldDaily = new Map();
 
   try {
-    [eurPoints, usdPoints] = await Promise.all([
+    [eurPoints, usdPoints, goldDaily] = await Promise.all([
       fetchRange('eur', lastDate),
-      fetchRange('usd', lastDate)
+      fetchRange('usd', lastDate),
+      fetchGoldDailyCloseUsd(lastDate)
     ]);
   } catch (error) {
     console.warn(`Konnte keine neuen API-Daten laden, berechne nur bestehende Daten neu: ${error.message}`);
@@ -191,17 +226,29 @@ async function main() {
     .map((date) => {
       const eur = eurDaily.get(date);
       const usd = usdDaily.get(date);
+      const goldUsd = goldDaily.get(date);
       if (eur == null || usd == null) return null;
-      return `${date},${eur.toFixed(2)},${usd.toFixed(2)}`;
+      const closeGld = Number.isFinite(goldUsd) && goldUsd > 0
+        ? usd / goldUsd
+        : Number.NaN;
+      return `${date},${eur.toFixed(2)},${usd.toFixed(2)},${closeGld}`;
     })
     .filter(Boolean);
 
   const parsedNewRows = newRows.map((line) => {
-    const [date, closeEur, closeUsd] = line.split(',');
-    return { date, closeEur: Number(closeEur), closeUsd: Number(closeUsd) };
+    const [date, closeEur, closeUsd, closeGld] = line.split(',');
+    return { date, closeEur: Number(closeEur), closeUsd: Number(closeUsd), closeGld: Number(closeGld) };
   });
 
   const mergedRows = [...existing, ...parsedNewRows].sort((a, b) => a.date.localeCompare(b.date));
+  let lastCloseGld = null;
+  for (const row of mergedRows) {
+    if (!Number.isFinite(row.closeGld)) {
+      row.closeGld = lastCloseGld;
+    } else {
+      lastCloseGld = row.closeGld;
+    }
+  }
   if (mergedRows.length === 0) {
     console.log('Keine Daten verfügbar.');
     return;
@@ -230,7 +277,7 @@ async function main() {
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
   console.log(`USD Power-Law Parameter: q01(alpha=${q01Usd.alpha.toFixed(6)}, beta=${q01Usd.beta.toFixed(6)}), q50(alpha=${q50Usd.alpha.toFixed(6)}, beta=${q50Usd.beta.toFixed(6)}), q99(alpha=${q99Usd.alpha.toFixed(6)}, beta=${q99Usd.beta.toFixed(6)})`);
 
-  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd';
+  const header = 'date,close_eur,close_usd,close_gld,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd';
   const serializedRows = mergedRows.map((row, index) => {
     const ma50Eur = sma50Eur[index] != null ? sma50Eur[index].toFixed(2) : '';
     const ma200Eur = sma200Eur[index] != null ? sma200Eur[index].toFixed(2) : '';
@@ -248,7 +295,8 @@ async function main() {
     const plQ50Usd = predictPowerLaw(row.date, q50Usd.alpha, q50Usd.beta).toFixed(2);
     const plQ99Usd = predictPowerLaw(row.date, q99Usd.alpha, q99Usd.beta).toFixed(2);
     const powerLawFactorUsd = safeRatio(row.closeUsd - Number(plQ01Usd), Number(plQ99Usd) - Number(plQ01Usd));
-    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`;
+    const closeGld = Number.isFinite(row.closeGld) ? row.closeGld : '';
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${closeGld},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`;
   });
 
   const merged = [header, ...serializedRows].join('\n') + '\n';
