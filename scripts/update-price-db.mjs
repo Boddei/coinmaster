@@ -256,6 +256,7 @@ async function main() {
 
   const eurSeries = mergedRows.map((row) => row.closeEur);
   const usdSeries = mergedRows.map((row) => row.closeUsd);
+  const gldSeries = mergedRows.map((row) => row.closeGld);
   const dateSeries = mergedRows.map((row) => row.date);
   const sma50Eur = rollingAverage(eurSeries, 50);
   const sma200Eur = rollingAverage(eurSeries, 200);
@@ -263,6 +264,9 @@ async function main() {
   const sma50Usd = rollingAverage(usdSeries, 50);
   const sma200Usd = rollingAverage(usdSeries, 200);
   const sma1400Usd = rollingAverage(usdSeries, 1400);
+  const sma50Gld = rollingAverage(gldSeries, 50);
+  const sma200Gld = rollingAverage(gldSeries, 200);
+  const sma1400Gld = rollingAverage(gldSeries, 1400);
   const fitRows = mergedRows.filter((row) => row.date >= POWERLAW_START_DATE);
   const fitDates = fitRows.map((row) => row.date);
   const fitEurSeries = fitRows.map((row) => row.closeEur);
@@ -277,7 +281,7 @@ async function main() {
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
   console.log(`USD Power-Law Parameter: q01(alpha=${q01Usd.alpha.toFixed(6)}, beta=${q01Usd.beta.toFixed(6)}), q50(alpha=${q50Usd.alpha.toFixed(6)}, beta=${q50Usd.beta.toFixed(6)}), q99(alpha=${q99Usd.alpha.toFixed(6)}, beta=${q99Usd.beta.toFixed(6)})`);
 
-  const header = 'date,close_eur,close_usd,close_gld,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd';
+  const header = 'date,close_eur,close_usd,close_gld,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,sma50d_gld,sma200d_gld,sma200w_gld,sma200w_factor_gld,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd';
   const serializedRows = mergedRows.map((row, index) => {
     const ma50Eur = sma50Eur[index] != null ? sma50Eur[index].toFixed(2) : '';
     const ma200Eur = sma200Eur[index] != null ? sma200Eur[index].toFixed(2) : '';
@@ -286,7 +290,11 @@ async function main() {
     const ma200Usd = sma200Usd[index] != null ? sma200Usd[index].toFixed(2) : '';
     const ma200wUsd = sma1400Usd[index] != null ? sma1400Usd[index].toFixed(2) : '';
     const sma200wFactorEur = safeRatio(row.closeEur, Number(ma200wEur));
+    const ma50Gld = sma50Gld[index] != null ? sma50Gld[index].toFixed(8) : '';
+    const ma200Gld = sma200Gld[index] != null ? sma200Gld[index].toFixed(8) : '';
+    const ma200wGld = sma1400Gld[index] != null ? sma1400Gld[index].toFixed(8) : '';
     const sma200wFactorUsd = safeRatio(row.closeUsd, Number(ma200wUsd));
+    const sma200wFactorGld = safeRatio(row.closeGld, Number(ma200wGld));
     const plQ01Eur = predictPowerLaw(row.date, q01.alpha, q01.beta).toFixed(2);
     const plQ50Eur = predictPowerLaw(row.date, q50.alpha, q50.beta).toFixed(2);
     const plQ99Eur = predictPowerLaw(row.date, q99.alpha, q99.beta).toFixed(2);
@@ -296,7 +304,7 @@ async function main() {
     const plQ99Usd = predictPowerLaw(row.date, q99Usd.alpha, q99Usd.beta).toFixed(2);
     const powerLawFactorUsd = safeRatio(row.closeUsd - Number(plQ01Usd), Number(plQ99Usd) - Number(plQ01Usd));
     const closeGld = Number.isFinite(row.closeGld) ? row.closeGld : '';
-    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${closeGld},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`;
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${closeGld},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${ma50Gld},${ma200Gld},${ma200wGld},${sma200wFactorGld},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`;
   });
 
   const merged = [header, ...serializedRows].join('\n') + '\n';
