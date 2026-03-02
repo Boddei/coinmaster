@@ -512,7 +512,7 @@ function updateChart(priceData) {
         const date = new Date(point.timestamp);
         if (currentChartDays <= 7) {
             return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit' });
-        } else if (currentChartDays <= 90) {
+        } else if (currentChartDays <= 180) {
             return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric' });
         } else {
             return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'short' });
