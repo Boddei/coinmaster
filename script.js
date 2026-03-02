@@ -6,6 +6,13 @@ const CONFIG = {
         baseUrl: 'https://api.coingecko.com/api/v3',
         coin: 'bitcoin'
     },
+    bitcoinQuant: {
+        endpoints: [
+            'https://bitcoinquant.co/api/treasuries',
+            'https://bitcoinquant.co/api/companies',
+            'https://bitcoinquant.co/api/bitcoin-treasuries'
+        ]
+    },
     refreshInterval: 60000, // 1 minute
     chartDays: 7,
     localPriceDbPath: 'data/btc_daily_prices.csv',
@@ -1533,16 +1540,22 @@ function escapeHtml(value = '') {
 
 async function loadTreasuryCompanies() {
     try {
-        const [quoteResult, treasuryResult] = await Promise.allSettled([
+        const [quoteResult, bitcoinQuantResult, treasuryResult] = await Promise.allSettled([
             fetch(getYahooQuoteUrl(CONFIG.treasuryCompanies.map((company) => company.quoteSymbol))),
+            fetchBitcoinQuantTreasuryData(),
             fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`)
         ]);
 
         const quoteResponse = quoteResult.status === 'fulfilled' ? quoteResult.value : null;
+        const bitcoinQuantPayload = bitcoinQuantResult.status === 'fulfilled' ? bitcoinQuantResult.value : null;
         const treasuryResponse = treasuryResult.status === 'fulfilled' ? treasuryResult.value : null;
 
         if (quoteResult.status === 'rejected') {
             console.warn('Yahoo Quote API nicht erreichbar:', quoteResult.reason);
+        }
+
+        if (bitcoinQuantResult.status === 'rejected') {
+            console.warn('BitcoinQuant Treasury Feed nicht erreichbar:', bitcoinQuantResult.reason);
         }
 
         if (treasuryResult.status === 'rejected') {
@@ -1553,7 +1566,9 @@ async function loadTreasuryCompanies() {
         const treasuryPayload = (treasuryResponse && treasuryResponse.ok) ? await treasuryResponse.json() : null;
 
         const quoteMap = mapQuotesBySymbol(quotePayload?.quoteResponse?.result || []);
-        const holdingsMap = mapHoldingsByName(treasuryPayload?.companies || []);
+        const bitcoinQuantCompanies = parseBitcoinQuantCompanies(bitcoinQuantPayload);
+        const coingeckoCompanies = Array.isArray(treasuryPayload?.companies) ? treasuryPayload.companies : [];
+        const holdingsMap = mapHoldingsByName([...bitcoinQuantCompanies, ...coingeckoCompanies]);
 
         CONFIG.treasuryCompanies.forEach((company) => {
             const quote = quoteMap.get(company.quoteSymbol.toUpperCase()) || null;
@@ -1569,6 +1584,60 @@ async function loadTreasuryCompanies() {
         console.error('Fehler beim Laden der Treasury-Unternehmen:', error);
         renderTreasuryFallback();
     }
+}
+
+async function fetchBitcoinQuantTreasuryData() {
+    const endpoints = CONFIG?.bitcoinQuant?.endpoints || [];
+    let lastError = null;
+
+    for (const endpoint of endpoints) {
+        try {
+            const response = await fetch(endpoint);
+            if (!response.ok) {
+                lastError = new Error(`HTTP ${response.status} für ${endpoint}`);
+                continue;
+            }
+
+            const payload = await response.json();
+            if (payload) return payload;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+
+    if (lastError) {
+        throw lastError;
+    }
+
+    return null;
+}
+
+function parseBitcoinQuantCompanies(payload) {
+    const companies = [
+        ...toArray(payload?.companies),
+        ...toArray(payload?.data),
+        ...toArray(payload?.results)
+    ];
+
+    if (companies.length > 0) {
+        return companies.map((company) => ({
+            ...company,
+            total_holdings: Number(
+                company?.total_holdings
+                ?? company?.bitcoin
+                ?? company?.btc
+                ?? company?.btc_holdings
+                ?? company?.holdings
+                ?? company?.treasury_btc
+            )
+        }));
+    }
+
+    return [];
+}
+
+function toArray(value) {
+    return Array.isArray(value) ? value : [];
 }
 
 function getYahooQuoteUrl(symbols = []) {
