@@ -74,19 +74,14 @@ Automatisch via GitHub Actions:
 - Läuft täglich und committed Änderungen an `data/smart_money.json`.
 
 
-## Vergleichsdaten: Bitcoin in Gold und MSCI ACWI
+## Vergleichsdaten: Bitcoin in Gold und MSCI World
 
 Die unabhängige tägliche Vergleichsdatei liegt unter `data/btc_real_value.csv`. Sie wird von `scripts/update-real-value-db.mjs` erzeugt und durch denselben täglichen GitHub-Actions-Workflow gepflegt.
 
-Enthalten sind:
+Die CSV enthält den BTC-Tageskurs in USD, Gold in USD je Feinunze und den MSCI World USD Price Return Index. Daraus berechnet sie:
+- BTC-Kaufkraft in Feinunzen Gold
+- BTC geteilt durch den MSCI-World-Indexstand (Indexpunkte pro BTC)
 
-- BTC-Referenzkurs in USD aus der täglichen Coin-Metrics-Community-Referenzrate
-- Goldpreis in USD je Feinunze und BTC-Kaufkraft in Feinunzen
-- MSCI ACWI USD Price Return Kursindex (ohne Dividenden)
-- zwei auf 100 normierte Reihen für den Vergleich der Wertentwicklung
+MSCI-World-Handelsschlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. `msci_world_observation_date` zeigt den zugehörigen Handelstag. Die beigefügte Tabelle wurde zur Plausibilisierung der MSCI-World-Reihe und der beiden BTC-Verhältnisse herangezogen; für die tägliche Aktualisierung nutzt der Workflow den Yahoo-Finance-Ticker `^990100-USD-STRD`. Das ist die Price-Return-Variante ohne Dividenden. Die BTC- und Goldreihen stammen weiterhin aus Coin Metrics `PriceUSD` und World Gold Council/FastMarkets.
 
-Gold- und ACWI-Schlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. Die Spalten `gold_observation_date` und `msci_acwi_observation_date` zeigen jeweils, von welchem Handelstag der fortgeschriebene Wert stammt. Die Indexreihen beginnen am ersten Datum, an dem BTC, Gold und ACWI gemeinsam verfügbar sind.
-
-Datenquellen: [Coin Metrics Community API, täglicher BTC-Schlusskurs `PriceUSD`](https://docs.coinmetrics.io/network-data/network-data-overview/market/price); [World Gold Council/FastMarkets, Goldpreis-Methodik](https://www.gold.org/data/gold-price/methodology) für USD je Feinunze; [Yahoo Finance: MSCI ACWI USD Index](https://finance.yahoo.com/quote/%5E892400-USD-STRD/) für den Index `^892400-USD-STRD` (Price Return, ohne Dividenden). MSCI führt Preis-, Brutto-Gesamtrendite- und Netto-Gesamtrendite-Varianten getrennt. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
-
-Die Coin-Metrics-Community-Daten stehen unter CC BY-NC (Namensnennung, nicht-kommerzielle Nutzung).
+Datenquellen: [Coin Metrics Community API, täglicher BTC-Schlusskurs `PriceUSD`](https://docs.coinmetrics.io/network-data/network-data-overview/market/price); [World Gold Council/FastMarkets, Goldpreis-Methodik](https://www.gold.org/data/gold-price/methodology); [Yahoo Finance: MSCI World USD Index](https://finance.yahoo.com/quote/%5E990100-USD-STRD/); [MSCI World Index](https://www.msci.com/indexes/index/990100). Die Coin-Metrics-Community-Daten stehen unter CC BY-NC (Namensnennung, nicht-kommerzielle Nutzung). Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
