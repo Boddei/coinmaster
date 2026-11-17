@@ -66,6 +66,7 @@ let btcChart = null;
 let realValueChart = null;
 let realValueRows = [];
 let realValueChartRows = [];
+const realValueMaVisibility = { sma50d: false, sma200d: false, sma200w: false };
 let realValueDailyLoadPromise = null;
 let realValueLoadRequestId = 0;
 const realValueIntradayCache = new Map();
@@ -1204,8 +1205,14 @@ async function ensureRealValueDailyRows() {
                     btcUsd: number(cells, 'btc_usd_close'),
                     goldUsdPerOz: number(cells, 'gold_usd_per_troy_oz'),
                     btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
+                    btcGoldSma50d: number(cells, 'btc_value_in_gold_oz_sma50d'),
+                    btcGoldSma200d: number(cells, 'btc_value_in_gold_oz_sma200d'),
+                    btcGoldSma200w: number(cells, 'btc_value_in_gold_oz_sma200w'),
                     msciWorldUsd: number(cells, 'msci_world_usd'),
-                    btcInMsciWorld: number(cells, 'btc_value_in_msci_world')
+                    btcInMsciWorld: number(cells, 'btc_value_in_msci_world'),
+                    btcWorldSma50d: number(cells, 'btc_value_in_msci_world_sma50d'),
+                    btcWorldSma200d: number(cells, 'btc_value_in_msci_world_sma200d'),
+                    btcWorldSma200w: number(cells, 'btc_value_in_msci_world_sma200w')
                 };
             }).filter((row) => row.date && (Number.isFinite(row.btcInGoldOz) || Number.isFinite(row.btcInMsciWorld)));
             if (realValueRows.length < 2) throw new Error('The real value CSV does not contain enough chart data.');
@@ -1330,7 +1337,13 @@ async function fetchIntradayRealValueRows(days) {
             goldUsdPerOz,
             msciWorldUsd,
             btcInGoldOz: Number.isFinite(goldUsdPerOz) ? point.value / goldUsdPerOz : null,
-            btcInMsciWorld: Number.isFinite(msciWorldUsd) ? point.value / msciWorldUsd : null
+            btcInMsciWorld: Number.isFinite(msciWorldUsd) ? point.value / msciWorldUsd : null,
+            btcGoldSma50d: lastDailyValue(point.timestamp, 'btcGoldSma50d'),
+            btcGoldSma200d: lastDailyValue(point.timestamp, 'btcGoldSma200d'),
+            btcGoldSma200w: lastDailyValue(point.timestamp, 'btcGoldSma200w'),
+            btcWorldSma50d: lastDailyValue(point.timestamp, 'btcWorldSma50d'),
+            btcWorldSma200d: lastDailyValue(point.timestamp, 'btcWorldSma200d'),
+            btcWorldSma200w: lastDailyValue(point.timestamp, 'btcWorldSma200w')
         };
     }).filter((row) => Number.isFinite(row.btcInGoldOz) || Number.isFinite(row.btcInMsciWorld));
     if (rows.length < 20) throw new Error('Not enough overlapping BTC, Gold and MSCI World intraday observations.');
@@ -1406,6 +1419,16 @@ function setupRealValueControls() {
             updateRealValueChart();
         });
     });
+
+    document.querySelectorAll('[data-real-ma]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const maKey = button.dataset.realMa;
+            if (!(maKey in realValueMaVisibility)) return;
+            realValueMaVisibility[maKey] = !realValueMaVisibility[maKey];
+            button.classList.toggle('active', realValueMaVisibility[maKey]);
+            updateRealValueChart();
+        });
+    });
 }
 
 function updateRealValueChart() {
@@ -1434,17 +1457,52 @@ function updateRealValueChart() {
         type: 'line',
         data: {
             labels,
-            datasets: [{
-                label: seriesLabel,
-                data: values,
-                borderColor: color,
-                backgroundColor: isGold ? 'rgba(212, 175, 55, 0.08)' : 'rgba(74, 158, 255, 0.08)',
-                borderWidth: 2,
-                fill: false,
-                tension: 0.15,
-                pointRadius: 0,
-                spanGaps: true
-            }]
+            datasets: [
+                {
+                    label: seriesLabel,
+                    data: values,
+                    borderColor: color,
+                    backgroundColor: isGold ? 'rgba(212, 175, 55, 0.08)' : 'rgba(74, 158, 255, 0.08)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    spanGaps: true
+                },
+                {
+                    label: 'SMA 50D',
+                    data: rows.map((row) => isGold ? row.btcGoldSma50d : row.btcWorldSma50d),
+                    borderColor: '#4a9eff',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !realValueMaVisibility.sma50d
+                },
+                {
+                    label: 'SMA 200D',
+                    data: rows.map((row) => isGold ? row.btcGoldSma200d : row.btcWorldSma200d),
+                    borderColor: '#a855f7',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !realValueMaVisibility.sma200d
+                },
+                {
+                    label: 'SMA 200W',
+                    data: rows.map((row) => isGold ? row.btcGoldSma200w : row.btcWorldSma200w),
+                    borderColor: '#10b981',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !realValueMaVisibility.sma200w
+                }
+            ]
         },
         options: {
             responsive: true,
