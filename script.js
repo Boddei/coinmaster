@@ -69,6 +69,7 @@ let realValueChartRows = [];
 let realValueDailyLoadPromise = null;
 let realValueLoadRequestId = 0;
 const realValueIntradayCache = new Map();
+const bitcoinIntradayCache = new Map();
 let currentRealValueDays = '7';
 let currentRealValueScale = 'linear';
 let currentRealValueCurrency = 'gold';
@@ -189,6 +190,7 @@ async function initApp() {
         await loadBitcoinData();
         await loadFundamentalIndicators();
         await loadTreasuryCompanies();
+        if (['1', '7', '30'].includes(String(currentChartDays))) await loadChartData(currentChartDays);
         if (['1', '7', '30'].includes(currentRealValueDays)) await loadRealValueComparison();
     }, CONFIG.refreshInterval);
 
@@ -385,20 +387,24 @@ async function loadChartData(days) {
     const requestId = ++chartRequestId;
 
     try {
-        const response = await fetch(buildChartUrl(days));
-        
-        if (!response.ok) throw new Error('Chart API Fehler');
-        
-        const data = await response.json();
-        if (requestId !== chartRequestId) return;
+        let pricePoints;
+        if (['1', '7', '30'].includes(String(days))) {
+            const intraday = await fetchBitcoinIntradayPrices(String(days), currentChartCurrency);
+            pricePoints = intraday.points.map((point) => [point.timestamp, point.value]);
+        } else {
+            const response = await fetch(buildChartUrl(days));
+            if (!response.ok) throw new Error('Chart API Fehler');
+            const data = await response.json();
+            pricePoints = data.prices;
+        }
 
-        if (!Array.isArray(data.prices) || data.prices.length === 0) {
+        if (requestId !== chartRequestId) return;
+        if (!Array.isArray(pricePoints) || pricePoints.length === 0) {
             throw new Error('Keine Chart-Daten erhalten');
         }
 
-        const enrichedData = enrichMarketPricesWithMovingAverages(data.prices, localPriceRows);
+        const enrichedData = enrichMarketPricesWithMovingAverages(pricePoints, localPriceRows);
         updateChart(extendSeriesWithProjection(enrichedData));
-        
     } catch (error) {
         if (requestId !== chartRequestId) return;
         console.error('Fehler beim Laden der Chart-Daten:', error);
@@ -533,6 +539,8 @@ function updateChart(priceData) {
     const labels = priceData.map(point => {
         const date = new Date(point.timestamp);
         if (currentChartDays <= 7) {
+            return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } else if (currentChartDays <= 30) {
             return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric', hour: '2-digit' });
         } else if (currentChartDays <= 180) {
             return date.toLocaleDateString('de-DE', { month: 'short', day: 'numeric' });
@@ -1229,9 +1237,9 @@ async function fetchYahooIntraday(symbol, days, interval) {
     return points;
 }
 
-async function fetchCoinGeckoIntraday(days) {
+async function fetchCoinGeckoIntraday(days, currency = 'usd') {
     const response = await fetch(
-        `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?vs_currency=usd&days=${days}`,
+        `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?vs_currency=${currency}&days=${days}`,
         { cache: 'no-store' }
     );
     if (!response.ok) throw new Error(`CoinGecko intraday request failed (HTTP ${response.status}).`);
@@ -1243,6 +1251,29 @@ async function fetchCoinGeckoIntraday(days) {
         .sort((a, b) => a.timestamp - b.timestamp);
     if (points.length < 20) throw new Error('CoinGecko returned too few intraday BTC prices.');
     return points;
+}
+
+async function fetchBitcoinIntradayPrices(days, currency = 'usd') {
+    const key = `${days}:${currency}`;
+    const cacheMs = days === '1' ? 60_000 : 10 * 60_000;
+    const cached = bitcoinIntradayCache.get(key);
+    if (cached && Date.now() - cached.loadedAt < cacheMs) return cached;
+
+    const interval = days === '1' ? '5m' : '60m';
+    let points;
+    let source;
+    try {
+        points = await fetchCoinGeckoIntraday(days, currency);
+        source = 'CoinGecko';
+    } catch (error) {
+        const ticker = currency === 'eur' ? 'BTC-EUR' : 'BTC-USD';
+        points = await fetchYahooIntraday(ticker, days, interval);
+        source = 'Yahoo-Fallback';
+    }
+
+    const result = { points, source, interval, loadedAt: Date.now() };
+    bitcoinIntradayCache.set(key, result);
+    return result;
 }
 
 function lastIntradayPoint(points, timestamp) {
@@ -1279,13 +1310,13 @@ async function fetchIntradayRealValueRows(days) {
     if (cached && Date.now() - cached.loadedAt < cacheMs) return cached;
 
     const interval = days === '1' ? '5m' : '60m';
-    const [btcResult, goldPoints, worldPoints] = await Promise.all([
-        fetchCoinGeckoIntraday(days).then((points) => ({ points, source: 'CoinGecko' })).catch((error) => ({ error })),
+    const [btcData, goldPoints, worldPoints] = await Promise.all([
+        fetchBitcoinIntradayPrices(days, 'usd'),
         fetchYahooIntraday('GC=F', days, interval),
         fetchYahooIntraday('^990100-USD-STRD', days, interval)
     ]);
-    const btcPoints = btcResult.points ?? await fetchYahooIntraday('BTC-USD', days, interval);
-    const btcSource = btcResult.points ? 'CoinGecko' : 'Yahoo-Fallback';
+    const btcPoints = btcData.points;
+    const btcSource = btcData.source;
 
     const rows = btcPoints.map((point) => {
         const gold = lastIntradayPoint(goldPoints, point.timestamp);
