@@ -72,3 +72,19 @@ Automatisch via GitHub Actions:
 
 - Workflow: `.github/workflows/update-smart-money.yml`
 - Läuft täglich und committed Änderungen an `data/smart_money.json`.
+
+
+## Vergleichsdaten: Bitcoin in Gold und MSCI ACWI
+
+Die unabhängige tägliche Vergleichsdatei liegt unter `data/btc_real_value.csv`. Sie wird von `scripts/update-real-value-db.mjs` erzeugt und durch denselben täglichen GitHub-Actions-Workflow gepflegt.
+
+Enthalten sind:
+
+- BTC-Tages-Schlusskurs in USD aus `btc_daily_prices.csv`
+- Goldpreis in USD je Feinunze und BTC-Kaufkraft in Feinunzen
+- MSCI ACWI Indexstand in USD
+- zwei auf 100 normierte Reihen für den Vergleich der Wertentwicklung
+
+Gold- und ACWI-Schlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. Die Spalten `gold_observation_date` und `msci_acwi_observation_date` zeigen jeweils, von welchem Handelstag der fortgeschriebene Wert stammt. Die Indexreihen beginnen am ersten Datum, an dem BTC, Gold und ACWI gemeinsam verfügbar sind.
+
+Datenquellen: CoinGecko für BTC (über die bestehende BTC-Datenbank), World Gold Council/FastMarkets für Gold in USD je Feinunze und Yahoo Finance für den MSCI-ACWI-USD-Index `^892400-USD-STRD`. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
