@@ -80,11 +80,11 @@ Die unabhängige tägliche Vergleichsdatei liegt unter `data/btc_real_value.csv`
 
 Enthalten sind:
 
-- BTC-Tages-Schlusskurs in USD aus `btc_daily_prices.csv`
+- BTC-Referenzkurs in USD aus der täglichen Coin-Metrics-Community-Referenzrate
 - Goldpreis in USD je Feinunze und BTC-Kaufkraft in Feinunzen
 - MSCI ACWI Indexstand in USD
 - zwei auf 100 normierte Reihen für den Vergleich der Wertentwicklung
 
 Gold- und ACWI-Schlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. Die Spalten `gold_observation_date` und `msci_acwi_observation_date` zeigen jeweils, von welchem Handelstag der fortgeschriebene Wert stammt. Die Indexreihen beginnen am ersten Datum, an dem BTC, Gold und ACWI gemeinsam verfügbar sind.
 
-Datenquellen: CoinGecko für BTC (über die bestehende BTC-Datenbank), World Gold Council/FastMarkets für Gold in USD je Feinunze und Yahoo Finance für den MSCI-ACWI-USD-Index `^892400-USD-STRD`. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
+Datenquellen: Coin Metrics Community API, tägliche `ReferenceRateUSD` für BTC; World Gold Council/FastMarkets für Gold in USD je Feinunze; Yahoo Finance für den MSCI-ACWI-USD-Index `^892400-USD-STRD`. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
