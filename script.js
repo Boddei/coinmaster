@@ -63,6 +63,10 @@ const CONFIG = {
 
 // Global state
 let btcChart = null;
+let realValueChart = null;
+let realValueRows = [];
+let currentRealValueDays = 'max';
+let currentRealValueScale = 'logarithmic';
 let currentChartDays = 7;
 let currentChartScale = 'linear';
 let currentChartCurrency = 'eur';
@@ -141,6 +145,7 @@ async function initApp() {
 
     // Setup controls immediately so UI can react while data streams in
     setupChartControls();
+    setupRealValueControls();
     setupKpiCurrencyControls();
     renderAssetClassTreemap();
 
@@ -161,8 +166,12 @@ async function initApp() {
     // Stage 2 + 3: chart first, then calculations/indicators
     requestAnimationFrame(async () => {
         await localPriceRowsPromise;
-        await loadChartData(currentChartDays);
+        await Promise.all([
+            loadChartData(currentChartDays),
+            loadRealValueComparison()
+        ]);
         revealSection('chart');
+        revealSection('real-value');
 
         setTimeout(async () => {
             await loadFundamentalIndicators();
@@ -1145,6 +1154,258 @@ async function getLatestLocalClose() {
 }
 
 // ============================================================================
+
+async function loadRealValueComparison() {
+    const status = document.getElementById('realValueStatus');
+    try {
+        const response = await fetch('data/btc_real_value.csv', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status} while loading real value CSV`);
+
+        const lines = (await response.text()).trim().split(/\r?\n/);
+        const header = lines.shift()?.split(',') ?? [];
+        const indexByName = new Map(header.map((name, index) => [name, index]));
+        const read = (cells, name) => {
+            const index = indexByName.get(name);
+            return Number.isInteger(index) ? cells[index] : '';
+        };
+        const number = (cells, name) => {
+            const value = read(cells, name);
+            if (value == null || value.trim() === '') return null;
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        realValueRows = lines.map((line) => {
+            const cells = line.split(',');
+            return {
+                date: read(cells, 'date'),
+                btcUsd: number(cells, 'btc_usd_close'),
+                goldUsdPerOz: number(cells, 'gold_usd_per_troy_oz'),
+                goldObservationDate: read(cells, 'gold_observation_date'),
+                btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
+                acwiUsd: number(cells, 'msci_acwi_usd'),
+                acwiObservationDate: read(cells, 'msci_acwi_observation_date'),
+                btcGoldIndex: number(cells, 'btc_gold_index_100'),
+                acwiIndex: number(cells, 'msci_acwi_index_100')
+            };
+        }).filter((row) => row.date && (Number.isFinite(row.btcGoldIndex) || Number.isFinite(row.acwiIndex)));
+
+        const baseRow = realValueRows.find((row) => Number.isFinite(row.btcGoldIndex) && Number.isFinite(row.acwiIndex));
+        if (!baseRow || realValueRows.length < 2) throw new Error('The real value CSV does not contain a common comparison period.');
+
+        renderRealValueAnalytics(baseRow);
+        updateRealValueChart();
+        if (status) status.textContent = `Indexbasis: ${baseRow.date} = 100 · Daten bis ${realValueRows.at(-1).date}`;
+    } catch (error) {
+        console.error('Fehler beim Laden der BTC-in-Gold/ACWI-Daten:', error);
+        if (status) status.textContent = 'Vergleichsdaten konnten nicht geladen werden.';
+    }
+}
+
+function setupRealValueControls() {
+    document.querySelectorAll('[data-real-days]').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('[data-real-days]').forEach((item) => item.classList.remove('active'));
+            button.classList.add('active');
+            currentRealValueDays = button.dataset.realDays;
+            updateRealValueChart();
+        });
+    });
+
+    document.querySelectorAll('[data-real-scale]').forEach((button) => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('[data-real-scale]').forEach((item) => item.classList.remove('active'));
+            button.classList.add('active');
+            currentRealValueScale = button.dataset.realScale;
+            updateRealValueChart();
+        });
+    });
+}
+
+function renderRealValueAnalytics(baseRow) {
+    const goldRows = realValueRows.filter((row) => Number.isFinite(row.btcInGoldOz));
+    const latestGoldRow = goldRows.at(-1);
+    const latestCommonRow = [...realValueRows].reverse().find((row) => Number.isFinite(row.btcGoldIndex) && Number.isFinite(row.acwiIndex));
+    const latestDate = latestGoldRow?.date ?? '';
+    const goldValue = latestGoldRow?.btcInGoldOz;
+    document.getElementById('realValueGoldNow').textContent = Number.isFinite(goldValue)
+        ? `${goldValue.toLocaleString('de-DE', { maximumFractionDigits: 2 })} oz`
+        : '–';
+    document.getElementById('realValueGoldDate').textContent = latestGoldRow?.goldObservationDate
+        ? `Goldpreis vom ${latestGoldRow.goldObservationDate}`
+        : 'Goldpreis nicht verfügbar';
+
+    if (latestCommonRow) {
+        const relativeFactor = latestCommonRow.btcGoldIndex / latestCommonRow.acwiIndex;
+        document.getElementById('realValueVsAcwi').textContent = Number.isFinite(relativeFactor)
+            ? `${relativeFactor.toLocaleString('de-DE', { maximumFractionDigits: 1 })}×`
+            : '–';
+    } else {
+        document.getElementById('realValueVsAcwi').textContent = '–';
+    }
+
+    let peak = 0;
+    let maxDrawdown = 0;
+    for (const row of realValueRows) {
+        if (!Number.isFinite(row.btcGoldIndex)) continue;
+        peak = Math.max(peak, row.btcGoldIndex);
+        if (peak > 0) maxDrawdown = Math.min(maxDrawdown, (row.btcGoldIndex / peak) - 1);
+    }
+    document.getElementById('realValueMaxDrawdown').textContent = `${(maxDrawdown * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`;
+
+    const model = fitRealValuePowerLaw(realValueRows);
+    if (model) {
+        document.getElementById('realValuePowerLaw').textContent = `β ${model.beta.toFixed(2)}`;
+        document.getElementById('realValuePowerLawDetail').textContent = `R² ${model.rSquared.toFixed(2)} · log-log OLS`;
+    } else {
+        document.getElementById('realValuePowerLaw').textContent = '–';
+        document.getElementById('realValuePowerLawDetail').textContent = 'Zu wenige Beobachtungen für einen Fit';
+    }
+
+    const firstDate = baseRow.date;
+    const goldObservationDate = latestGoldRow?.goldObservationDate || '–';
+    const acwiObservationDate = latestCommonRow?.acwiObservationDate || '–';
+    document.getElementById('realValueFootnote').textContent =
+        `Gemeinsamer Vergleich ab ${firstDate}. Letzte Goldbeobachtung: ${goldObservationDate}; letzter ACWI-Stand: ${acwiObservationDate}. Feiertage/Wochenenden verwenden den jeweils letzten beobachteten Marktstand. Der Power-Law-Fit beschreibt nur historische Daten und ist keine Prognose.`;
+}
+
+function fitRealValuePowerLaw(rows) {
+    const samples = rows
+        .filter((row) => Number.isFinite(row.btcInGoldOz) && row.btcInGoldOz > 0)
+        .map((row) => ({
+            x: Math.log(convertToBitcoinDayIndex(row.date)),
+            y: Math.log(row.btcInGoldOz)
+        }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+    if (samples.length < 30) return null;
+
+    const meanX = samples.reduce((sum, point) => sum + point.x, 0) / samples.length;
+    const meanY = samples.reduce((sum, point) => sum + point.y, 0) / samples.length;
+    let covariance = 0;
+    let varianceX = 0;
+    let varianceY = 0;
+
+    for (const point of samples) {
+        covariance += (point.x - meanX) * (point.y - meanY);
+        varianceX += (point.x - meanX) ** 2;
+        varianceY += (point.y - meanY) ** 2;
+    }
+    if (varianceX === 0 || varianceY === 0) return null;
+
+    const beta = covariance / varianceX;
+    const alpha = meanY - (beta * meanX);
+    let residualSumSquares = 0;
+    for (const point of samples) {
+        const residual = point.y - (alpha + beta * point.x);
+        residualSumSquares += residual ** 2;
+    }
+
+    return {
+        alpha,
+        beta,
+        rSquared: Math.max(0, Math.min(1, 1 - (residualSumSquares / varianceY)))
+    };
+}
+
+function getRealValueChartRows() {
+    if (realValueRows.length === 0) return [];
+    if (currentRealValueDays === 'max') return realValueRows;
+
+    const latestDate = realValueRows.at(-1).date;
+    const start = new Date(`${latestDate}T00:00:00Z`);
+    start.setUTCDate(start.getUTCDate() - Number(currentRealValueDays));
+    const startDate = start.toISOString().slice(0, 10);
+    return realValueRows.filter((row) => row.date >= startDate);
+}
+
+function updateRealValueChart() {
+    const canvas = document.getElementById('realValueChart');
+    if (!canvas || realValueRows.length === 0) return;
+
+    const rows = getRealValueChartRows();
+    const ctx = canvas.getContext('2d');
+    const model = fitRealValuePowerLaw(realValueRows);
+    const baseRow = realValueRows.find((row) => Number.isFinite(row.btcGoldIndex) && Number.isFinite(row.btcInGoldOz));
+    const btcGoldPowerLaw = rows.map((row) => {
+        if (!model || !baseRow || !Number.isFinite(row.btcInGoldOz)) return null;
+        const dayIndex = convertToBitcoinDayIndex(row.date);
+        const fittedGoldOz = Math.exp(model.alpha + (model.beta * Math.log(dayIndex)));
+        return (fittedGoldOz / baseRow.btcInGoldOz) * 100;
+    });
+
+    if (realValueChart) realValueChart.destroy();
+    realValueChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: rows.map((row) => row.date),
+            datasets: [
+                {
+                    label: 'BTC-Kaufkraft in Gold (100 = Start)',
+                    data: rows.map((row) => row.btcGoldIndex),
+                    borderColor: '#f7931a',
+                    backgroundColor: 'rgba(247, 147, 26, 0.08)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    spanGaps: true
+                },
+                {
+                    label: 'MSCI ACWI USD (100 = Start)',
+                    data: rows.map((row) => row.acwiIndex),
+                    borderColor: '#4a9eff',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.15,
+                    pointRadius: 0,
+                    spanGaps: true
+                },
+                {
+                    label: 'BTC-in-Gold Power-Law-Fit (historisch)',
+                    data: btcGoldPowerLaw,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [6, 4],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0,
+                    spanGaps: true
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.dataset.label}: ${Number(context.parsed.y).toLocaleString('de-DE', { maximumFractionDigits: 2 })}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 12, maxRotation: 0 },
+                    grid: { color: 'rgba(255,255,255,0.05)' }
+                },
+                y: {
+                    type: currentRealValueScale,
+                    min: currentRealValueScale === 'logarithmic' ? 1 : undefined,
+                    ticks: {
+                        callback: (value) => Number(value).toLocaleString('de-DE', { maximumFractionDigits: 0 })
+                    },
+                    grid: { color: 'rgba(255,255,255,0.08)' },
+                    title: { display: true, text: 'Index (Start = 100)' }
+                }
+            }
+        }
+    });
+}
+
 // Fundamental Indicators
 // ============================================================================
 
