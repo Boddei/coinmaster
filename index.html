@@ -122,47 +122,32 @@
         <section class="section chart-section real-value-section" data-stage="real-value">
             <div class="real-value-header">
                 <div>
-                    <h2>Bitcoin in Gold vs MSCI ACWI</h2>
-                    <p class="real-value-subtitle">Beide Reihen auf 100 am ersten gemeinsamen Datum gesetzt. MSCI ACWI ist ein Kursindex in USD ohne Dividenden. Die y-Achse startet logarithmisch.</p>
+                    <h2>Bitcoin vs Real Values</h2>
+                    <p class="real-value-subtitle">BTC-Kurs ausgedrückt in Gold (Feinunzen) oder MSCI World (Indexpunkten).</p>
                 </div>
-                <div class="chart-controls" aria-label="Zeitraum des Gold- und ACWI-Charts">
+                <div class="chart-controls" aria-label="Zeitraum des Real-Values-Charts">
+                    <button class="chart-btn" data-real-days="1">1T</button>
+                    <button class="chart-btn active" data-real-days="7">7T</button>
+                    <button class="chart-btn" data-real-days="30">1M</button>
+                    <button class="chart-btn" data-real-days="90">3M</button>
+                    <button class="chart-btn" data-real-days="180">6M</button>
                     <button class="chart-btn" data-real-days="365">1J</button>
+                    <button class="chart-btn" data-real-days="730">2J</button>
                     <button class="chart-btn" data-real-days="1825">5J</button>
                     <button class="chart-btn" data-real-days="3650">10J</button>
-                    <button class="chart-btn active" data-real-days="max">Seit Start</button>
+                    <button class="chart-btn" data-real-days="max">Seit Start</button>
                 </div>
-                <div class="chart-controls" aria-label="Skalierung des Gold- und ACWI-Charts">
-                    <button class="chart-btn active" data-real-scale="logarithmic">Log</button>
-                    <button class="chart-btn" data-real-scale="linear">Linear</button>
+                <div class="chart-controls" aria-label="Real-Value-Einheit auswählen">
+                    <button class="chart-btn active" data-real-currency="gold">Gold</button>
+                    <button class="chart-btn" data-real-currency="world">MSCI World</button>
+                    <button class="chart-btn active" data-real-scale="linear">Linear</button>
+                    <button class="chart-btn" data-real-scale="logarithmic">Log</button>
                 </div>
             </div>
             <div class="chart-container real-value-chart-container">
-                <canvas id="realValueChart" aria-label="Indexierter Vergleich von Bitcoin-Kaufkraft in Gold und MSCI ACWI"></canvas>
+                <canvas id="realValueChart" aria-label="Bitcoin-Kurs in Gold oder MSCI World"></canvas>
             </div>
             <p class="real-value-status" id="realValueStatus" role="status">Vergleichsdaten werden geladen …</p>
-            <div class="real-value-stats">
-                <article class="real-value-stat-card">
-                    <span class="real-value-stat-label">1 BTC in Gold</span>
-                    <strong id="realValueGoldNow">–</strong>
-                    <span class="real-value-stat-detail" id="realValueGoldDate">letzter verfügbarer Goldpreis</span>
-                </article>
-                <article class="real-value-stat-card">
-                    <span class="real-value-stat-label">Wachstumsfaktor vs ACWI</span>
-                    <strong id="realValueVsAcwi">–</strong>
-                    <span class="real-value-stat-detail">BTC-Kaufkraft in Gold geteilt durch ACWI-Index</span>
-                </article>
-                <article class="real-value-stat-card">
-                    <span class="real-value-stat-label">Max. Rückgang BTC in Gold</span>
-                    <strong id="realValueMaxDrawdown">–</strong>
-                    <span class="real-value-stat-detail">historischer Rückgang vom vorherigen Hoch</span>
-                </article>
-                <article class="real-value-stat-card">
-                    <span class="real-value-stat-label">Power-Law-Fit</span>
-                    <strong id="realValuePowerLaw">–</strong>
-                    <span class="real-value-stat-detail" id="realValuePowerLawDetail">log-log OLS; explorative Anpassung</span>
-                </article>
-            </div>
-            <p class="real-value-footnote" id="realValueFootnote"></p>
         </section>
 
         <!-- Fundamental Indicators -->
