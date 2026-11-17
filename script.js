@@ -1183,7 +1183,7 @@ async function loadRealValueComparison() {
                 goldUsdPerOz: number(cells, 'gold_usd_per_troy_oz'),
                 goldObservationDate: read(cells, 'gold_observation_date'),
                 btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
-                acwiUsd: number(cells, 'msci_acwi_usd'),
+                acwiUsd: number(cells, 'msci_acwi_usd_price_return'),
                 acwiObservationDate: read(cells, 'msci_acwi_observation_date'),
                 btcGoldIndex: number(cells, 'btc_gold_index_100'),
                 acwiIndex: number(cells, 'msci_acwi_index_100')
@@ -1266,7 +1266,7 @@ function renderRealValueAnalytics(baseRow) {
     const goldObservationDate = latestGoldRow?.goldObservationDate || '–';
     const acwiObservationDate = latestCommonRow?.acwiObservationDate || '–';
     document.getElementById('realValueFootnote').textContent =
-        `Gemeinsamer Vergleich ab ${firstDate}. Letzte Goldbeobachtung: ${goldObservationDate}; letzter ACWI-Stand: ${acwiObservationDate}. Feiertage/Wochenenden verwenden den jeweils letzten beobachteten Marktstand. Der Power-Law-Fit beschreibt nur historische Daten und ist keine Prognose.`;
+        `Gemeinsamer Vergleich ab ${firstDate}. Letzte Goldbeobachtung: ${goldObservationDate}; letzter ACWI-Kursindexstand: ${acwiObservationDate}. MSCI ACWI USD Price Return ohne Dividenden; Feiertage/Wochenenden verwenden den jeweils letzten beobachteten Marktstand. Der Power-Law-Fit beschreibt nur historische Daten und ist keine Prognose.`;
 }
 
 function fitRealValuePowerLaw(rows) {
@@ -1351,7 +1351,7 @@ function updateRealValueChart() {
                     spanGaps: true
                 },
                 {
-                    label: 'MSCI ACWI USD (100 = Start)',
+                    label: 'MSCI ACWI USD Price Return, ohne Dividenden (100 = Start)',
                     data: rows.map((row) => row.acwiIndex),
                     borderColor: '#4a9eff',
                     backgroundColor: 'transparent',
