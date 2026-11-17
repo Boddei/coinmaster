@@ -770,17 +770,24 @@ function setupChartControls() {
     const scaleButtons = document.querySelectorAll('.chart-btn[data-scale]');
     const currencyButtons = document.querySelectorAll('.chart-btn[data-currency]');
     const maButtons = document.querySelectorAll('.ma-btn[data-ma]');
-    const futureDateInput = document.getElementById('futureDate');
+    const futureDateInputs = [
+        document.getElementById('futureDate'),
+        document.getElementById('realValueFutureDate')
+    ].filter(Boolean);
 
-    if (futureDateInput) {
+    if (futureDateInputs.length > 0) {
         const today = new Date().toISOString().slice(0, 10);
-        futureDateInput.min = today;
-        futureDateInput.value = today;
         projectionDate = today;
-
-        futureDateInput.addEventListener('change', async () => {
-            projectionDate = futureDateInput.value || today;
-            await loadChartData(currentChartDays);
+        futureDateInputs.forEach((input) => {
+            input.min = today;
+            input.value = today;
+            input.addEventListener('change', async () => {
+                projectionDate = input.value || today;
+                futureDateInputs.forEach((otherInput) => {
+                    if (otherInput !== input) otherInput.value = projectionDate;
+                });
+                await loadChartData(currentChartDays);
+            });
         });
     }
 
@@ -1216,6 +1223,7 @@ function setupRealValueControls() {
             document.querySelectorAll('[data-real-currency]').forEach((item) => item.classList.remove('active'));
             button.classList.add('active');
             currentRealValueCurrency = button.dataset.realCurrency;
+            document.querySelector('.real-value-section')?.setAttribute('data-active-currency', currentRealValueCurrency);
             updateRealValueChart();
         });
     });
@@ -1250,7 +1258,7 @@ function updateRealValueChart() {
     const unitLabel = isGold ? 'Feinunzen Gold pro BTC' : 'MSCI-World-Indexpunkte pro BTC';
     const seriesLabel = isGold ? 'BTC in Gold (Feinunzen)' : 'BTC in MSCI World (Indexpunkte)';
     const values = rows.map((row) => isGold ? row.btcInGoldOz : row.btcInMsciWorld);
-    const color = isGold ? '#f7931a' : '#4a9eff';
+    const color = isGold ? '#d4af37' : '#4a9eff';
     const ctx = canvas.getContext('2d');
 
     if (realValueChart) realValueChart.destroy();
@@ -1262,7 +1270,7 @@ function updateRealValueChart() {
                 label: seriesLabel,
                 data: values,
                 borderColor: color,
-                backgroundColor: isGold ? 'rgba(247, 147, 26, 0.08)' : 'rgba(74, 158, 255, 0.08)',
+                backgroundColor: isGold ? 'rgba(212, 175, 55, 0.08)' : 'rgba(74, 158, 255, 0.08)',
                 borderWidth: 2,
                 fill: false,
                 tension: 0.15,
@@ -1275,7 +1283,7 @@ function updateRealValueChart() {
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-                legend: { position: 'bottom' },
+                legend: { display: false },
                 tooltip: {
                     callbacks: {
                         label: (context) => {
