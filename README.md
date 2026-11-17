@@ -88,3 +88,4 @@ Enthalten sind:
 Gold- und ACWI-Schlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. Die Spalten `gold_observation_date` und `msci_acwi_observation_date` zeigen jeweils, von welchem Handelstag der fortgeschriebene Wert stammt. Die Indexreihen beginnen am ersten Datum, an dem BTC, Gold und ACWI gemeinsam verfügbar sind.
 
 Datenquellen: Coin Metrics Community API, täglicher BTC-Schlusskurs `PriceUSD` in USD; World Gold Council/FastMarkets für Gold in USD je Feinunze; Yahoo Finance für den MSCI-ACWI-USD-Index `^892400-USD-STRD`. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
+Die Coin-Metrics-Community-Daten stehen unter CC BY-NC (Namensnennung, nicht-kommerzielle Nutzung).
