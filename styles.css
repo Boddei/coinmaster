@@ -887,13 +887,15 @@ body {
 
 
 /* Real-value currency selection follows the active series color */
-.real-value-section[data-active-currency="gold"] .chart-btn.active {
+.real-value-section[data-active-currency="gold"] .chart-btn.active,
+.real-value-section[data-active-currency="gold"] .chart-btn:hover {
     background: #d4af37;
     border-color: #d4af37;
     color: #17130a;
 }
 
-.real-value-section[data-active-currency="world"] .chart-btn.active {
+.real-value-section[data-active-currency="world"] .chart-btn.active,
+.real-value-section[data-active-currency="world"] .chart-btn:hover {
     background: #4a9eff;
     border-color: #4a9eff;
     color: #08111d;
