@@ -82,10 +82,10 @@ Enthalten sind:
 
 - BTC-Referenzkurs in USD aus der täglichen Coin-Metrics-Community-Referenzrate
 - Goldpreis in USD je Feinunze und BTC-Kaufkraft in Feinunzen
-- MSCI ACWI Indexstand in USD
+- MSCI ACWI USD Price Return Kursindex (ohne Dividenden)
 - zwei auf 100 normierte Reihen für den Vergleich der Wertentwicklung
 
 Gold- und ACWI-Schlusskurse werden über Wochenenden und Marktschließungen als letzter verfügbarer Stand fortgeschrieben. Die Spalten `gold_observation_date` und `msci_acwi_observation_date` zeigen jeweils, von welchem Handelstag der fortgeschriebene Wert stammt. Die Indexreihen beginnen am ersten Datum, an dem BTC, Gold und ACWI gemeinsam verfügbar sind.
 
-Datenquellen: [Coin Metrics Community API, täglicher BTC-Schlusskurs `PriceUSD`](https://docs.coinmetrics.io/network-data/network-data-overview/market/price); [World Gold Council/FastMarkets, Goldpreis-Methodik](https://www.gold.org/data/gold-price/methodology) für USD je Feinunze; [Yahoo Finance: MSCI ACWI USD Index](https://finance.yahoo.com/quote/%5E892400-USD-STRD/) für den Index `^892400-USD-STRD`. Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
+Datenquellen: [Coin Metrics Community API, täglicher BTC-Schlusskurs `PriceUSD`](https://docs.coinmetrics.io/network-data/network-data-overview/market/price); [World Gold Council/FastMarkets, Goldpreis-Methodik](https://www.gold.org/data/gold-price/methodology) für USD je Feinunze; [Yahoo Finance: MSCI ACWI USD Index](https://finance.yahoo.com/quote/%5E892400-USD-STRD/) für den Index `^892400-USD-STRD` (Price Return, ohne Dividenden). Der Workflow bricht ab, wenn eine Quelle keine ausreichende Historie liefert, statt eine unvollständige Datei zu schreiben.
 Die Coin-Metrics-Community-Daten stehen unter CC BY-NC (Namensnennung, nicht-kommerzielle Nutzung).
