@@ -1,9 +1,10 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 
-const BTC_DB_PATH = 'data/btc_daily_prices.csv';
 const OUTPUT_PATH = 'data/btc_real_value.csv';
 const START_DATE = '2010-01-01';
 const GOLD_API_BASE = 'https://fsapi.gold.org/api/goldprice/v13/chart/price';
+const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
+const BITCOIN_ID = 'bitcoin';
 const ACWI_SYMBOL = '^892400-USD-STRD';
 const ACWI_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -69,32 +70,28 @@ async function fetchAcwiHistory() {
   return values;
 }
 
-async function loadBitcoinHistory() {
-  const csv = await readFile(BTC_DB_PATH, 'utf8');
-  const lines = csv.trim().split(/\r?\n/);
-  const header = lines.shift()?.split(',') ?? [];
-  const dateIndex = header.indexOf('date');
-  const priceIndex = header.indexOf('close_usd');
-
-  if (dateIndex < 0 || priceIndex < 0) {
-    throw new Error(`${BTC_DB_PATH} must contain date and close_usd columns.`);
-  }
-
+async function fetchBitcoinHistory() {
+  const from = toUnixSeconds(START_DATE);
+  const to = Math.floor(Date.now() / 1000);
+  const url = `${COINGECKO_API_BASE}/coins/${BITCOIN_ID}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`;
+  const payload = await fetchJson(url);
   const prices = new Map();
-  for (const line of lines) {
-    const cells = line.split(',');
-    const date = cells[dateIndex];
-    const value = Number(cells[priceIndex]);
-    if (date && Number.isFinite(value) && value > 0) prices.set(date, value);
+
+  for (const [timestamp, rawPrice] of payload?.prices ?? []) {
+    const price = Number(rawPrice);
+    if (Number.isFinite(price) && price > 0) prices.set(dateFromMs(timestamp), price);
   }
 
-  if (prices.size < 1000) throw new Error('BTC history returned too few daily observations.');
+  // Drop the current UTC date because it is still an incomplete candle.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  prices.delete(todayUtc);
+
+  if (prices.size < 1000) throw new Error('CoinGecko returned too few daily BTC observations.');
   const lastDate = [...prices.keys()].sort().at(-1);
   const ageDays = (Date.now() - new Date(`${lastDate}T00:00:00Z`).getTime()) / DAY_MS;
   if (ageDays > 7) throw new Error(`BTC history is stale; last available close is ${lastDate}.`);
   return prices;
 }
-
 function forwardFill(dates, observations) {
   const values = new Map();
   let lastValue = null;
@@ -112,7 +109,7 @@ function forwardFill(dates, observations) {
 
 async function main() {
   const [btcUsd, goldUsdPerOz, acwiUsd] = await Promise.all([
-    loadBitcoinHistory(),
+    fetchBitcoinHistory(),
     fetchGoldHistory(),
     fetchAcwiHistory()
   ]);
@@ -146,7 +143,7 @@ async function main() {
     const acwiIndex = Number.isFinite(row.acwi?.value) ? (row.acwi.value / baseRow.acwi.value) * 100 : '';
     return [
       row.date,
-      row.btcUsd.toFixed(2),
+      row.btcUsd.toFixed(8),
       row.gold ? row.gold.value.toFixed(2) : '',
       row.gold?.observationDate ?? '',
       Number.isFinite(row.btcGoldOz) ? row.btcGoldOz.toFixed(8) : '',
