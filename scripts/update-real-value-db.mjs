@@ -142,7 +142,7 @@ async function main() {
     'gold_usd_per_troy_oz',
     'gold_observation_date',
     'btc_value_in_gold_oz',
-    'msci_acwi_usd_price_return',
+    'msci_acwi_usd',
     'msci_acwi_observation_date',
     'btc_gold_index_100',
     'msci_acwi_index_100'
