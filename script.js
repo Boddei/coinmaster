@@ -1183,7 +1183,7 @@ async function loadRealValueComparison() {
                 goldUsdPerOz: number(cells, 'gold_usd_per_troy_oz'),
                 goldObservationDate: read(cells, 'gold_observation_date'),
                 btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
-                acwiUsd: number(cells, 'msci_acwi_usd_price_return'),
+                acwiUsd: number(cells, 'msci_acwi_usd'),
                 acwiObservationDate: read(cells, 'msci_acwi_observation_date'),
                 btcGoldIndex: number(cells, 'btc_gold_index_100'),
                 acwiIndex: number(cells, 'msci_acwi_index_100')
