@@ -119,6 +119,30 @@ function forwardFill(dates, observations) {
   return values;
 }
 
+function calculateSimpleMovingAverage(values, windowSize) {
+  const averages = Array(values.length).fill(null);
+  let sum = 0;
+  let missingCount = 0;
+
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (Number.isFinite(value)) sum += value;
+    else missingCount += 1;
+
+    if (index >= windowSize) {
+      const expired = values[index - windowSize];
+      if (Number.isFinite(expired)) sum -= expired;
+      else missingCount -= 1;
+    }
+
+    if (index >= windowSize - 1 && missingCount === 0) {
+      averages[index] = sum / windowSize;
+    }
+  }
+
+  return averages;
+}
+
 async function main() {
   const [btcUsd, goldUsdPerOz, msciWorldUsd] = await Promise.all([
     fetchBitcoinHistory(),
@@ -137,30 +161,55 @@ async function main() {
     'btc_value_in_gold_oz',
     'msci_world_usd',
     'msci_world_observation_date',
-    'btc_value_in_msci_world'
+    'btc_value_in_msci_world',
+    'btc_value_in_gold_oz_sma50d',
+    'btc_value_in_gold_oz_sma200d',
+    'btc_value_in_gold_oz_sma200w',
+    'btc_value_in_msci_world_sma50d',
+    'btc_value_in_msci_world_sma200d',
+    'btc_value_in_msci_world_sma200w'
   ];
-  const rows = dates.map((date) => {
+  const dailyRows = dates.map((date) => {
     const btc = btcUsd.get(date);
     const gold = goldAsOf.get(date);
     const world = worldAsOf.get(date);
-    const btcInGold = gold ? btc / gold.value : null;
-    const btcInWorld = world ? btc / world.value : null;
-
-    return [
+    return {
       date,
-      btc.toFixed(8),
-      gold ? gold.value.toFixed(2) : '',
-      gold?.observationDate ?? '',
-      Number.isFinite(btcInGold) ? btcInGold.toFixed(8) : '',
-      world ? world.value.toFixed(4) : '',
-      world?.observationDate ?? '',
-      Number.isFinite(btcInWorld) ? btcInWorld.toFixed(10) : ''
-    ].join(',');
+      btc,
+      gold,
+      world,
+      btcInGold: gold ? btc / gold.value : null,
+      btcInWorld: world ? btc / world.value : null
+    };
   });
+  const goldSma50 = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInGold), 50);
+  const goldSma200 = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInGold), 200);
+  const goldSma200w = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInGold), 1400);
+  const worldSma50 = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInWorld), 50);
+  const worldSma200 = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInWorld), 200);
+  const worldSma200w = calculateSimpleMovingAverage(dailyRows.map((row) => row.btcInWorld), 1400);
+  const formatSma = (value, precision) => Number.isFinite(value) ? value.toFixed(precision) : '';
+
+  const rows = dailyRows.map((row, index) => [
+    row.date,
+    row.btc.toFixed(8),
+    row.gold ? row.gold.value.toFixed(2) : '',
+    row.gold?.observationDate ?? '',
+    Number.isFinite(row.btcInGold) ? row.btcInGold.toFixed(8) : '',
+    row.world ? row.world.value.toFixed(4) : '',
+    row.world?.observationDate ?? '',
+    Number.isFinite(row.btcInWorld) ? row.btcInWorld.toFixed(10) : '',
+    formatSma(goldSma50[index], 8),
+    formatSma(goldSma200[index], 8),
+    formatSma(goldSma200w[index], 8),
+    formatSma(worldSma50[index], 10),
+    formatSma(worldSma200[index], 10),
+    formatSma(worldSma200w[index], 10)
+  ].join(','));
 
   await mkdir('data', { recursive: true });
   await writeFile(OUTPUT_PATH, [header.join(','), ...rows].join('\n') + '\n', 'utf8');
-  console.log(`Updated ${OUTPUT_PATH}: ${rows.length} daily BTC dates with Gold and MSCI World values.`);
+  console.log(`Updated ${OUTPUT_PATH}: ${rows.length} daily BTC dates with Gold, MSCI World and SMA values.`);
 }
 
 main().catch((error) => {
