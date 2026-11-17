@@ -254,19 +254,38 @@ body {
 .chart-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 24px;
     margin-bottom: 25px;
-    flex-wrap: wrap;
-    gap: 15px;
 }
 
-.chart-controls {
+.chart-header-title {
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+.chart-header-title h2 {
+    margin: 0 0 4px;
+}
+
+.chart-header-controls {
     display: flex;
+    flex-direction: column;
+    align-items: flex-end;
     gap: 8px;
-    flex-wrap: wrap;
+    margin-left: auto;
+    min-width: 0;
 }
 
-.scale-controls {
+.chart-control-row {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.chart-secondary-controls {
     margin-left: auto;
 }
 
@@ -866,18 +885,18 @@ body {
     }
 }
 
-/* Bitcoin vs real values chart */
-.real-value-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 18px;
+
+/* Real-value currency selection follows the active series color */
+.real-value-section[data-active-currency="gold"] .chart-btn[data-real-currency="gold"].active {
+    background: #d4af37;
+    border-color: #d4af37;
+    color: #17130a;
 }
 
-.real-value-header h2 {
-    margin: 0 0 4px;
+.real-value-section[data-active-currency="world"] .chart-btn[data-real-currency="world"].active {
+    background: #4a9eff;
+    border-color: #4a9eff;
+    color: #08111d;
 }
 
 .real-value-subtitle,
@@ -895,6 +914,26 @@ body {
     margin-top: 8px;
 }
 
+@media (max-width: 1000px) {
+    .chart-header {
+        flex-direction: column;
+    }
+
+    .chart-header-controls {
+        align-items: flex-start;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    .chart-control-row {
+        justify-content: flex-start;
+    }
+
+    .chart-secondary-controls {
+        margin-left: 0;
+    }
+}
+
 @media (max-width: 900px) {
     .real-value-chart-container {
         height: 360px;
@@ -902,8 +941,12 @@ body {
 }
 
 @media (max-width: 520px) {
-    .real-value-header {
-        align-items: flex-start;
+    .chart-control-row {
+        gap: 6px;
+    }
+
+    .chart-control-row .chart-btn {
+        padding: 7px 10px;
     }
 
     .real-value-chart-container {
