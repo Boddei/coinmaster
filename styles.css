@@ -887,13 +887,13 @@ body {
 
 
 /* Real-value currency selection follows the active series color */
-.real-value-section[data-active-currency="gold"] .chart-btn[data-real-currency="gold"].active {
+.real-value-section[data-active-currency="gold"] .chart-btn.active {
     background: #d4af37;
     border-color: #d4af37;
     color: #17130a;
 }
 
-.real-value-section[data-active-currency="world"] .chart-btn[data-real-currency="world"].active {
+.real-value-section[data-active-currency="world"] .chart-btn.active {
     background: #4a9eff;
     border-color: #4a9eff;
     color: #08111d;
