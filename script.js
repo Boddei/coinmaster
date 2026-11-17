@@ -65,6 +65,10 @@ const CONFIG = {
 let btcChart = null;
 let realValueChart = null;
 let realValueRows = [];
+let realValueChartRows = [];
+let realValueDailyLoadPromise = null;
+let realValueLoadRequestId = 0;
+const realValueIntradayCache = new Map();
 let currentRealValueDays = '7';
 let currentRealValueScale = 'linear';
 let currentRealValueCurrency = 'gold';
@@ -185,6 +189,7 @@ async function initApp() {
         await loadBitcoinData();
         await loadFundamentalIndicators();
         await loadTreasuryCompanies();
+        if (['1', '7', '30'].includes(currentRealValueDays)) await loadRealValueComparison();
     }, CONFIG.refreshInterval);
 
     // Smart-Money-Update reicht täglich, wir pollen nur sehr selten neu
@@ -1163,48 +1168,182 @@ async function getLatestLocalClose() {
 
 // ============================================================================
 
+async function ensureRealValueDailyRows() {
+    if (realValueRows.length > 0) return realValueRows;
+    if (!realValueDailyLoadPromise) {
+        realValueDailyLoadPromise = (async () => {
+            const response = await fetch('data/btc_real_value.csv', { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status} while loading real value CSV`);
+            const lines = (await response.text()).trim().split(/\r?\n/);
+            const header = lines.shift()?.split(',') ?? [];
+            const indexByName = new Map(header.map((name, index) => [name, index]));
+            const read = (cells, name) => {
+                const index = indexByName.get(name);
+                return Number.isInteger(index) ? cells[index] : '';
+            };
+            const number = (cells, name) => {
+                const value = read(cells, name);
+                if (value == null || value.trim() === '') return null;
+                const parsed = Number(value);
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+            realValueRows = lines.map((line) => {
+                const cells = line.split(',');
+                const date = read(cells, 'date');
+                return {
+                    date,
+                    timestamp: Date.parse(`${date}T00:00:00Z`),
+                    btcUsd: number(cells, 'btc_usd_close'),
+                    goldUsdPerOz: number(cells, 'gold_usd_per_troy_oz'),
+                    btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
+                    msciWorldUsd: number(cells, 'msci_world_usd'),
+                    btcInMsciWorld: number(cells, 'btc_value_in_msci_world')
+                };
+            }).filter((row) => row.date && (Number.isFinite(row.btcInGoldOz) || Number.isFinite(row.btcInMsciWorld)));
+            if (realValueRows.length < 2) throw new Error('The real value CSV does not contain enough chart data.');
+            return realValueRows;
+        })().catch((error) => {
+            realValueDailyLoadPromise = null;
+            throw error;
+        });
+    }
+    return realValueDailyLoadPromise;
+}
+
+async function fetchYahooIntraday(symbol, days, interval) {
+    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${days}d&interval=${interval}`;
+    // Yahoo's chart endpoint lacks browser CORS headers; this proxy adds them to public market data.
+    const response = await fetch(`https://proxy.cors.dev/${yahooUrl}`, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Yahoo intraday request failed (HTTP ${response.status}).`);
+    const payload = await response.json();
+    const result = payload?.chart?.result?.[0];
+    if (!result || result.meta?.symbol !== symbol) throw new Error(`Yahoo did not return ${symbol} intraday data.`);
+    const timestamps = result.timestamp ?? [];
+    const closes = result.indicators?.quote?.[0]?.close ?? [];
+    const points = timestamps.map((timestamp, index) => ({
+        timestamp: timestamp * 1000,
+        value: Number(closes[index])
+    })).filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.value) && point.value > 0)
+        .sort((a, b) => a.timestamp - b.timestamp);
+    if (points.length < 20) throw new Error(`Yahoo returned too few ${interval} points for ${symbol}.`);
+    return points;
+}
+
+async function fetchCoinGeckoIntraday(days) {
+    const response = await fetch(
+        `${CONFIG.coingecko.baseUrl}/coins/${CONFIG.coingecko.coin}/market_chart?vs_currency=usd&days=${days}`,
+        { cache: 'no-store' }
+    );
+    if (!response.ok) throw new Error(`CoinGecko intraday request failed (HTTP ${response.status}).`);
+    const payload = await response.json();
+    const points = (payload?.prices ?? []).map(([timestamp, value]) => ({
+        timestamp: Number(timestamp),
+        value: Number(value)
+    })).filter((point) => Number.isFinite(point.timestamp) && Number.isFinite(point.value) && point.value > 0)
+        .sort((a, b) => a.timestamp - b.timestamp);
+    if (points.length < 20) throw new Error('CoinGecko returned too few intraday BTC prices.');
+    return points;
+}
+
+function lastIntradayPoint(points, timestamp) {
+    let low = 0;
+    let high = points.length - 1;
+    let match = null;
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        if (points[middle].timestamp <= timestamp) {
+            match = points[middle];
+            low = middle + 1;
+        } else high = middle - 1;
+    }
+    return match;
+}
+
+function lastDailyValue(timestamp, field) {
+    let low = 0;
+    let high = realValueRows.length - 1;
+    let match = null;
+    while (low <= high) {
+        const middle = Math.floor((low + high) / 2);
+        if (realValueRows[middle].timestamp <= timestamp) {
+            match = realValueRows[middle];
+            low = middle + 1;
+        } else high = middle - 1;
+    }
+    return Number.isFinite(match?.[field]) ? match[field] : null;
+}
+
+async function fetchIntradayRealValueRows(days) {
+    const cacheMs = days === '1' ? 60_000 : 10 * 60_000;
+    const cached = realValueIntradayCache.get(days);
+    if (cached && Date.now() - cached.loadedAt < cacheMs) return cached;
+
+    const interval = days === '1' ? '5m' : '60m';
+    const [btcResult, goldPoints, worldPoints] = await Promise.all([
+        fetchCoinGeckoIntraday(days).then((points) => ({ points, source: 'CoinGecko' })).catch((error) => ({ error })),
+        fetchYahooIntraday('GC=F', days, interval),
+        fetchYahooIntraday('^990100-USD-STRD', days, interval)
+    ]);
+    const btcPoints = btcResult.points ?? await fetchYahooIntraday('BTC-USD', days, interval);
+    const btcSource = btcResult.points ? 'CoinGecko' : 'Yahoo-Fallback';
+
+    const rows = btcPoints.map((point) => {
+        const gold = lastIntradayPoint(goldPoints, point.timestamp);
+        const world = lastIntradayPoint(worldPoints, point.timestamp);
+        const goldUsdPerOz = gold?.value ?? lastDailyValue(point.timestamp, 'goldUsdPerOz');
+        const msciWorldUsd = world?.value ?? lastDailyValue(point.timestamp, 'msciWorldUsd');
+        return {
+            date: new Date(point.timestamp).toISOString().slice(0, 10),
+            timestamp: point.timestamp,
+            btcUsd: point.value,
+            goldUsdPerOz,
+            msciWorldUsd,
+            btcInGoldOz: Number.isFinite(goldUsdPerOz) ? point.value / goldUsdPerOz : null,
+            btcInMsciWorld: Number.isFinite(msciWorldUsd) ? point.value / msciWorldUsd : null
+        };
+    }).filter((row) => Number.isFinite(row.btcInGoldOz) || Number.isFinite(row.btcInMsciWorld));
+    if (rows.length < 20) throw new Error('Not enough overlapping BTC, Gold and MSCI World intraday observations.');
+
+    const result = { rows, btcSource, interval, loadedAt: Date.now() };
+    realValueIntradayCache.set(days, result);
+    return result;
+}
+
+function dailyRowsForRange(days) {
+    if (days === 'max') return realValueRows;
+    const latestDate = realValueRows.at(-1).date;
+    const start = new Date(`${latestDate}T00:00:00Z`);
+    start.setUTCDate(start.getUTCDate() - Number(days));
+    const startDate = start.toISOString().slice(0, 10);
+    return realValueRows.filter((row) => row.date >= startDate);
+}
+
 async function loadRealValueComparison() {
+    const requestId = ++realValueLoadRequestId;
     const status = document.getElementById('realValueStatus');
     try {
-        const response = await fetch('data/btc_real_value.csv', { cache: 'no-store' });
-        if (!response.ok) throw new Error(`HTTP ${response.status} while loading real value CSV`);
+        await ensureRealValueDailyRows();
+        if (requestId !== realValueLoadRequestId) return;
 
-        const lines = (await response.text()).trim().split(/\r?\n/);
-        const header = lines.shift()?.split(',') ?? [];
-        const indexByName = new Map(header.map((name, index) => [name, index]));
-        const read = (cells, name) => {
-            const index = indexByName.get(name);
-            return Number.isInteger(index) ? cells[index] : '';
-        };
-        const number = (cells, name) => {
-            const value = read(cells, name);
-            if (value == null || value.trim() === '') return null;
-            const parsed = Number(value);
-            return Number.isFinite(parsed) ? parsed : null;
-        };
-
-        realValueRows = lines.map((line) => {
-            const cells = line.split(',');
-            return {
-                date: read(cells, 'date'),
-                btcUsd: number(cells, 'btc_usd_close'),
-                goldObservationDate: read(cells, 'gold_observation_date'),
-                btcInGoldOz: number(cells, 'btc_value_in_gold_oz'),
-                msciWorldUsd: number(cells, 'msci_world_usd'),
-                msciWorldObservationDate: read(cells, 'msci_world_observation_date'),
-                btcInMsciWorld: number(cells, 'btc_value_in_msci_world')
-            };
-        }).filter((row) => row.date && (Number.isFinite(row.btcInGoldOz) || Number.isFinite(row.btcInMsciWorld)));
-
-        if (realValueRows.length < 2) throw new Error('The real value CSV does not contain enough chart data.');
-        updateRealValueChart();
-        if (status) {
-            const latest = realValueRows.at(-1);
-            status.textContent = `Tägliche Daten bis ${latest.date}. MSCI World: USD-Preisindex; an Wochenenden und Feiertagen gilt der letzte verfügbare Indexschluss.`;
+        if (['1', '7', '30'].includes(currentRealValueDays)) {
+            const data = await fetchIntradayRealValueRows(currentRealValueDays);
+            if (requestId !== realValueLoadRequestId) return;
+            realValueChartRows = data.rows;
+            const resolution = data.interval === '5m' ? '5-Minuten' : 'Stunden';
+            if (status) status.textContent =
+                `Intraday: ${resolution} · BTC: ${data.btcSource} · Gold: COMEX-Futures (GC=F) · MSCI World: USD Price Return. Außerhalb der Handelszeiten gilt jeweils der letzte verfügbare Marktstand.`;
+        } else {
+            realValueChartRows = dailyRowsForRange(currentRealValueDays);
+            if (status) status.textContent = `Tägliche Daten bis ${realValueChartRows.at(-1)?.date ?? '–'} · lange Zeiträume aus der CSV.`;
         }
+
+        updateRealValueChart();
     } catch (error) {
-        console.error('Fehler beim Laden der BTC-in-Gold/MSCI-World-Daten:', error);
-        if (status) status.textContent = 'Vergleichsdaten konnten nicht geladen werden.';
+        if (requestId !== realValueLoadRequestId) return;
+        console.error('Fehler beim Laden der Intraday-Daten:', error);
+        realValueChartRows = dailyRowsForRange(currentRealValueDays);
+        updateRealValueChart();
+        if (status) status.textContent = 'Intraday-Daten nicht verfügbar; Tageswerte aus der CSV werden gezeigt.';
     }
 }
 
@@ -1214,7 +1353,7 @@ function setupRealValueControls() {
             document.querySelectorAll('[data-real-days]').forEach((item) => item.classList.remove('active'));
             button.classList.add('active');
             currentRealValueDays = button.dataset.realDays;
-            updateRealValueChart();
+            loadRealValueComparison();
         });
     });
 
@@ -1238,34 +1377,32 @@ function setupRealValueControls() {
     });
 }
 
-function getRealValueChartRows() {
-    if (realValueRows.length === 0) return [];
-    if (currentRealValueDays === 'max') return realValueRows;
-
-    const latestDate = realValueRows.at(-1).date;
-    const start = new Date(`${latestDate}T00:00:00Z`);
-    start.setUTCDate(start.getUTCDate() - Number(currentRealValueDays));
-    const startDate = start.toISOString().slice(0, 10);
-    return realValueRows.filter((row) => row.date >= startDate);
-}
-
 function updateRealValueChart() {
     const canvas = document.getElementById('realValueChart');
-    if (!canvas || realValueRows.length === 0) return;
+    if (!canvas || realValueChartRows.length === 0) return;
 
-    const rows = getRealValueChartRows();
+    const rows = realValueChartRows;
     const isGold = currentRealValueCurrency === 'gold';
     const unitLabel = isGold ? 'Feinunzen Gold pro BTC' : 'MSCI-World-Indexpunkte pro BTC';
     const seriesLabel = isGold ? 'BTC in Gold (Feinunzen)' : 'BTC in MSCI World (Indexpunkte)';
     const values = rows.map((row) => isGold ? row.btcInGoldOz : row.btcInMsciWorld);
     const color = isGold ? '#d4af37' : '#4a9eff';
+    const labels = rows.map((row) => {
+        const timestamp = Number.isFinite(row.timestamp) ? row.timestamp : Date.parse(`${row.date}T00:00:00Z`);
+        const date = new Date(timestamp);
+        if (currentRealValueDays === '1') return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        if (currentRealValueDays === '7' || currentRealValueDays === '30') {
+            return `${date.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })} ${date.toLocaleTimeString('de-DE', { hour: '2-digit' })}`;
+        }
+        return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'short', day: '2-digit' });
+    });
     const ctx = canvas.getContext('2d');
 
     if (realValueChart) realValueChart.destroy();
     realValueChart = new Chart(ctx, {
         type: 'line',
         data: {
-            labels: rows.map((row) => row.date),
+            labels,
             datasets: [{
                 label: seriesLabel,
                 data: values,
