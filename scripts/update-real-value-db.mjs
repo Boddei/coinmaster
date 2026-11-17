@@ -75,23 +75,27 @@ async function fetchBitcoinHistory() {
     metrics: 'ReferenceRateUSD',
     frequency: '1d',
     start_time: START_DATE,
+    paging_from: 'start',
     page_size: '10000'
   });
-  const url = `${COIN_METRICS_API_BASE}/timeseries/asset-metrics?${params}`;
-  const payload = await fetchJson(url);
+  let nextUrl = `${COIN_METRICS_API_BASE}/timeseries/asset-metrics?${params}`;
   const prices = new Map();
 
-  for (const point of payload?.data ?? []) {
-    const date = new Date(point.time).toISOString().slice(0, 10);
-    const price = Number(point.ReferenceRateUSD);
-    if (Number.isFinite(price) && price > 0) prices.set(date, price);
+  while (nextUrl) {
+    const payload = await fetchJson(nextUrl);
+    for (const point of payload?.data ?? []) {
+      const date = new Date(point.time).toISOString().slice(0, 10);
+      const price = Number(point.ReferenceRateUSD);
+      if (Number.isFinite(price) && price > 0) prices.set(date, price);
+    }
+    nextUrl = payload?.next_page_url ?? null;
   }
 
   // Drop the current UTC date because it is still an incomplete daily observation.
   const todayUtc = new Date().toISOString().slice(0, 10);
   prices.delete(todayUtc);
 
-  if (prices.size < 1000) throw new Error('Coin Metrics returned too few daily BTC observations.');
+  if (prices.size < 1000) throw new Error(`Coin Metrics returned only ${prices.size} daily BTC observations.`);
   const lastDate = [...prices.keys()].sort().at(-1);
   const ageDays = (Date.now() - new Date(`${lastDate}T00:00:00Z`).getTime()) / DAY_MS;
   if (ageDays > 7) throw new Error(`BTC history is stale; last available close is ${lastDate}.`);
