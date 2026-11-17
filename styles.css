@@ -866,7 +866,7 @@ body {
     }
 }
 
-/* BTC in gold vs MSCI ACWI comparison */
+/* Bitcoin vs real values chart */
 .real-value-header {
     display: flex;
     flex-wrap: wrap;
@@ -881,8 +881,7 @@ body {
 }
 
 .real-value-subtitle,
-.real-value-status,
-.real-value-footnote {
+.real-value-status {
     color: var(--text-secondary);
     font-size: 0.9rem;
 }
@@ -896,44 +895,7 @@ body {
     margin-top: 8px;
 }
 
-.real-value-stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 18px;
-}
-
-.real-value-stat-card {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    min-width: 0;
-    padding: 16px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-}
-
-.real-value-stat-label,
-.real-value-stat-detail {
-    color: var(--text-secondary);
-    font-size: 0.82rem;
-}
-
-.real-value-stat-card strong {
-    font-size: 1.35rem;
-    overflow-wrap: anywhere;
-}
-
-.real-value-footnote {
-    margin-top: 14px;
-}
-
 @media (max-width: 900px) {
-    .real-value-stats {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .real-value-chart-container {
         height: 360px;
     }
@@ -944,12 +906,7 @@ body {
         align-items: flex-start;
     }
 
-    .real-value-stats {
-        grid-template-columns: 1fr;
-    }
-
     .real-value-chart-container {
         height: 300px;
     }
 }
-
