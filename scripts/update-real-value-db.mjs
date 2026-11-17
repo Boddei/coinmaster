@@ -3,8 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 const OUTPUT_PATH = 'data/btc_real_value.csv';
 const START_DATE = '2010-01-01';
 const GOLD_API_BASE = 'https://fsapi.gold.org/api/goldprice/v13/chart/price';
-const COINGECKO_API_BASE = 'https://api.coingecko.com/api/v3';
-const BITCOIN_ID = 'bitcoin';
+const COIN_METRICS_API_BASE = 'https://community-api.coinmetrics.io/v4';
 const ACWI_SYMBOL = '^892400-USD-STRD';
 const ACWI_CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -71,22 +70,28 @@ async function fetchAcwiHistory() {
 }
 
 async function fetchBitcoinHistory() {
-  const from = toUnixSeconds(START_DATE);
-  const to = Math.floor(Date.now() / 1000);
-  const url = `${COINGECKO_API_BASE}/coins/${BITCOIN_ID}/market_chart/range?vs_currency=usd&from=${from}&to=${to}`;
+  const params = new URLSearchParams({
+    assets: 'btc',
+    metrics: 'ReferenceRateUSD',
+    frequency: '1d',
+    start_time: START_DATE,
+    page_size: '10000'
+  });
+  const url = `${COIN_METRICS_API_BASE}/timeseries/asset-metrics?${params}`;
   const payload = await fetchJson(url);
   const prices = new Map();
 
-  for (const [timestamp, rawPrice] of payload?.prices ?? []) {
-    const price = Number(rawPrice);
-    if (Number.isFinite(price) && price > 0) prices.set(dateFromMs(timestamp), price);
+  for (const point of payload?.data ?? []) {
+    const date = new Date(point.time).toISOString().slice(0, 10);
+    const price = Number(point.ReferenceRateUSD);
+    if (Number.isFinite(price) && price > 0) prices.set(date, price);
   }
 
-  // Drop the current UTC date because it is still an incomplete candle.
+  // Drop the current UTC date because it is still an incomplete daily observation.
   const todayUtc = new Date().toISOString().slice(0, 10);
   prices.delete(todayUtc);
 
-  if (prices.size < 1000) throw new Error('CoinGecko returned too few daily BTC observations.');
+  if (prices.size < 1000) throw new Error('Coin Metrics returned too few daily BTC observations.');
   const lastDate = [...prices.keys()].sort().at(-1);
   const ageDays = (Date.now() - new Date(`${lastDate}T00:00:00Z`).getTime()) / DAY_MS;
   if (ageDays > 7) throw new Error(`BTC history is stale; last available close is ${lastDate}.`);
