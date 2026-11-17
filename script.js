@@ -892,14 +892,12 @@ async function fetchLocalCsvPrices() {
             const date = readColumn(columns, 'date');
             const closeEur = readColumn(columns, 'close_eur');
             const closeUsd = readColumn(columns, 'close_usd');
-            const closeGld = readColumn(columns, 'close_gld');
-            if (!date || !closeEur || !closeUsd || !closeGld) continue;
+            if (!date || !closeEur || !closeUsd) continue;
 
             rows.push({
                 date,
                 closeEur: Number(closeEur),
                 closeUsd: Number(closeUsd),
-                closeGld: Number(closeGld),
                 sma50dEur: toNullableNumber(readColumn(columns, 'sma50d_eur')),
                 sma200dEur: toNullableNumber(readColumn(columns, 'sma200d_eur')),
                 sma200wEur: toNullableNumber(readColumn(columns, 'sma200w_eur')),
@@ -908,10 +906,6 @@ async function fetchLocalCsvPrices() {
                 sma200dUsd: toNullableNumber(readColumn(columns, 'sma200d_usd')),
                 sma200wUsd: toNullableNumber(readColumn(columns, 'sma200w_usd')),
                 sma200wFactorUsd: toNullableNumber(readColumn(columns, 'sma200w_factor_usd')),
-                sma50dGld: toNullableNumber(readColumn(columns, 'sma50d_gld')),
-                sma200dGld: toNullableNumber(readColumn(columns, 'sma200d_gld')),
-                sma200wGld: toNullableNumber(readColumn(columns, 'sma200w_gld')),
-                sma200wFactorGld: toNullableNumber(readColumn(columns, 'sma200w_factor_gld')),
                 powerLawQ01Eur: toNullableNumber(readColumn(columns, 'powerlaw_q01_eur')),
                 powerLawQ50Eur: toNullableNumber(readColumn(columns, 'powerlaw_q50_eur')),
                 powerLawQ99Eur: toNullableNumber(readColumn(columns, 'powerlaw_q99_eur')),
@@ -923,7 +917,7 @@ async function fetchLocalCsvPrices() {
             });
         }
 
-        const validRows = rows.filter(row => Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd) && Number.isFinite(row.closeGld));
+        const validRows = rows.filter(row => Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
         return attachCalculatedMovingAverages(validRows);
     } catch (error) {
         console.warn('Lokale CSV konnte nicht geladen werden:', error);
@@ -935,7 +929,6 @@ function attachCalculatedMovingAverages(rows) {
     const sorted = [...rows].sort((a, b) => a.date.localeCompare(b.date));
     const eurWindow = { sma50dEur: 50, sma200dEur: 200, sma200wEur: 1400 };
     const usdWindow = { sma50dUsd: 50, sma200dUsd: 200, sma200wUsd: 1400 };
-    const gldWindow = { sma50dGld: 50, sma200dGld: 200, sma200wGld: 1400 };
 
     let eurSum50 = 0;
     let eurSum200 = 0;
@@ -943,9 +936,6 @@ function attachCalculatedMovingAverages(rows) {
     let usdSum50 = 0;
     let usdSum200 = 0;
     let usdSum1400 = 0;
-    let gldSum50 = 0;
-    let gldSum200 = 0;
-    let gldSum1400 = 0;
 
     const dateSeries = sorted.map((row) => row.date);
     const eurSeries = sorted.map((row) => row.closeEur);
@@ -964,29 +954,22 @@ function attachCalculatedMovingAverages(rows) {
         usdSum50 += row.closeUsd;
         usdSum200 += row.closeUsd;
         usdSum1400 += row.closeUsd;
-        gldSum50 += row.closeGld;
-        gldSum200 += row.closeGld;
-        gldSum1400 += row.closeGld;
 
         if (index >= eurWindow.sma50dEur) {
             eurSum50 -= sorted[index - eurWindow.sma50dEur].closeEur;
             usdSum50 -= sorted[index - usdWindow.sma50dUsd].closeUsd;
-            gldSum50 -= sorted[index - gldWindow.sma50dGld].closeGld;
         }
         if (index >= eurWindow.sma200dEur) {
             eurSum200 -= sorted[index - eurWindow.sma200dEur].closeEur;
             usdSum200 -= sorted[index - usdWindow.sma200dUsd].closeUsd;
-            gldSum200 -= sorted[index - gldWindow.sma200dGld].closeGld;
         }
         if (index >= eurWindow.sma200wEur) {
             eurSum1400 -= sorted[index - eurWindow.sma200wEur].closeEur;
             usdSum1400 -= sorted[index - usdWindow.sma200wUsd].closeUsd;
-            gldSum1400 -= sorted[index - gldWindow.sma200wGld].closeGld;
         }
 
         const sma200wEur = row.sma200wEur ?? (index >= eurWindow.sma200wEur - 1 ? eurSum1400 / eurWindow.sma200wEur : null);
         const sma200wUsd = row.sma200wUsd ?? (index >= usdWindow.sma200wUsd - 1 ? usdSum1400 / usdWindow.sma200wUsd : null);
-        const sma200wGld = row.sma200wGld ?? (index >= gldWindow.sma200wGld - 1 ? gldSum1400 / gldWindow.sma200wGld : null);
         const powerLawQ01Eur = row.powerLawQ01Eur ?? predictPowerLaw(row.date, eurQ01);
         const powerLawQ99Eur = row.powerLawQ99Eur ?? predictPowerLaw(row.date, eurQ99);
         const powerLawQ01Usd = row.powerLawQ01Usd ?? predictPowerLaw(row.date, usdQ01);
@@ -1002,10 +985,6 @@ function attachCalculatedMovingAverages(rows) {
             sma200dUsd: row.sma200dUsd ?? (index >= usdWindow.sma200dUsd - 1 ? usdSum200 / usdWindow.sma200dUsd : null),
             sma200wUsd,
             sma200wFactorUsd: Number.isFinite(sma200wUsd) && sma200wUsd !== 0 ? row.closeUsd / sma200wUsd : null,
-            sma50dGld: row.sma50dGld ?? (index >= gldWindow.sma50dGld - 1 ? gldSum50 / gldWindow.sma50dGld : null),
-            sma200dGld: row.sma200dGld ?? (index >= gldWindow.sma200dGld - 1 ? gldSum200 / gldWindow.sma200dGld : null),
-            sma200wGld,
-            sma200wFactorGld: Number.isFinite(sma200wGld) && sma200wGld !== 0 ? row.closeGld / sma200wGld : null,
             powerLawQ01Eur,
             powerLawQ50Eur: row.powerLawQ50Eur ?? predictPowerLaw(row.date, eurQ50),
             powerLawQ99Eur,
@@ -1017,7 +996,6 @@ function attachCalculatedMovingAverages(rows) {
         };
     });
 }
-
 function fitPowerLawQuantileRegression(dates, prices, tau, options = {}) {
     const {
         iterations = 8000,
