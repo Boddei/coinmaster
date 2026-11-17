@@ -72,7 +72,7 @@ async function fetchAcwiHistory() {
 async function fetchBitcoinHistory() {
   const params = new URLSearchParams({
     assets: 'btc',
-    metrics: 'ReferenceRateUSD',
+    metrics: 'PriceUSD',
     frequency: '1d',
     start_time: START_DATE,
     paging_from: 'start',
@@ -85,7 +85,7 @@ async function fetchBitcoinHistory() {
     const payload = await fetchJson(nextUrl);
     for (const point of payload?.data ?? []) {
       const date = new Date(point.time).toISOString().slice(0, 10);
-      const price = Number(point.ReferenceRateUSD);
+      const price = Number(point.PriceUSD);
       if (Number.isFinite(price) && price > 0) prices.set(date, price);
     }
     nextUrl = payload?.next_page_url ?? null;
