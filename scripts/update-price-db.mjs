@@ -178,13 +178,17 @@ function safeRatio(numerator, denominator) {
 async function main() {
   const existing = await loadExistingRows();
   const lastDate = existing.length > 0 ? existing[existing.length - 1].date : '2010-01-01';
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const overlapStart = new Date(`${lastDate}T00:00:00Z`);
+  overlapStart.setUTCDate(overlapStart.getUTCDate() - 7);
+  const fetchStart = existing.length > 0 ? isoDate(overlapStart.getTime()) : '2010-01-01';
 
   let eurPoints = [];
   let usdPoints = [];
   try {
     [eurPoints, usdPoints] = await Promise.all([
-      fetchRange('eur', lastDate),
-      fetchRange('usd', lastDate)
+      fetchRange('eur', fetchStart),
+      fetchRange('usd', fetchStart)
     ]);
   } catch (error) {
     console.warn(`Konnte keine neuen API-Daten laden, berechne nur bestehende Daten neu: ${error.message}`);
@@ -193,23 +197,22 @@ async function main() {
   const eurDaily = pickDailyClose(eurPoints);
   const usdDaily = pickDailyClose(usdPoints);
 
-  const newRows = [...new Set([...eurDaily.keys(), ...usdDaily.keys()])]
-    .sort()
-    .filter((date) => date > lastDate)
-    .map((date) => {
-      const eur = eurDaily.get(date);
-      const usd = usdDaily.get(date);
-      if (eur == null || usd == null) return null;
-      return `${date},${eur.toFixed(2)},${usd.toFixed(2)}`;
-    })
-    .filter(Boolean);
+  // Replace overlapping rows with finalized API closes and skip today's still-open UTC candle.
+  const rowsByDate = new Map(existing.map((row) => [row.date, row]));
+  const apiDates = [...new Set([...eurDaily.keys(), ...usdDaily.keys()])].sort();
+  let updatedRows = 0;
+  for (const date of apiDates) {
+    const eur = eurDaily.get(date);
+    const usd = usdDaily.get(date);
+    if (date >= todayUtc || eur == null || usd == null) continue;
+    rowsByDate.set(date, { date, closeEur: eur, closeUsd: usd });
+    if (date >= fetchStart) updatedRows += 1;
+  }
 
-  const parsedNewRows = newRows.map((line) => {
-    const [date, closeEur, closeUsd] = line.split(',');
-    return { date, closeEur: Number(closeEur), closeUsd: Number(closeUsd) };
-  });
-
-  const mergedRows = [...existing, ...parsedNewRows].sort((a, b) => a.date.localeCompare(b.date));
+  const mergedRows = [...rowsByDate.values()]
+    .filter((row) => row.date < todayUtc)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const newRows = Array.from(rowsByDate.keys()).filter((date) => !existing.some((row) => row.date === date)).length;
   if (mergedRows.length === 0) {
     console.log('Keine Daten verfügbar.');
     return;
@@ -263,7 +266,7 @@ async function main() {
 
   await mkdir('data', { recursive: true });
   await writeFile(DB_PATH, merged, 'utf8');
-  console.log(`Aktualisiert: ${newRows.length} neue Zeile(n), Indikatoren neu berechnet in ${DB_PATH}`);
+  console.log(`Aktualisiert: ${newRows} neue Zeile(n), ${updatedRows} Tageskurs(e) aktualisiert; Indikatoren neu berechnet in ${DB_PATH}`);
 }
 
 main().catch((error) => {
