@@ -447,17 +447,38 @@ function buildFallbackChartSeries(rows, days) {
 }
 
 function enrichMarketPricesWithMovingAverages(priceData, rows) {
-    const rowByDate = new Map(rows.map((row) => [row.date, row]));
+    const sortedRows = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+    const latestByCurrency = Object.fromEntries(
+        POWER_LAW_SERIES.map((series) => [series.key, getSingleTermPowerLawParams(series.key)])
+    );
 
     return priceData.map((point) => {
         const timestamp = point[0];
-        const row = rowByDate.get(new Date(timestamp).toISOString().slice(0, 10));
-        const sma50d = currentChartCurrency === 'usd' ? row?.sma50dUsd : row?.sma50dEur;
-        const sma200d = currentChartCurrency === 'usd' ? row?.sma200dUsd : row?.sma200dEur;
-        const sma200w = currentChartCurrency === 'usd' ? row?.sma200wUsd : row?.sma200wEur;
-        const powerLawQ01 = currentChartCurrency === 'usd' ? row?.powerLawQ01Usd : row?.powerLawQ01Eur;
-        const powerLawQ50 = currentChartCurrency === 'usd' ? row?.powerLawQ50Usd : row?.powerLawQ50Eur;
-        const powerLawQ99 = currentChartCurrency === 'usd' ? row?.powerLawQ99Usd : row?.powerLawQ99Eur;
+        const date = new Date(timestamp).toISOString().slice(0, 10);
+        let low = 0;
+        let high = sortedRows.length - 1;
+        let row = null;
+        while (low <= high) {
+            const middle = Math.floor((low + high) / 2);
+            if (sortedRows[middle].date <= date) {
+                row = sortedRows[middle];
+                low = middle + 1;
+            } else {
+                high = middle - 1;
+            }
+        }
+
+        const currencySuffix = currentChartCurrency === 'usd' ? 'Usd' : 'Eur';
+        const sma50d = row?.[`sma50d${currencySuffix}`];
+        const sma200d = row?.[`sma200d${currencySuffix}`];
+        const sma200w = row?.[`sma200w${currencySuffix}`];
+        const pricePowerLaws = row?.date === date
+            ? null
+            : {
+                powerLawQ01: predictSingleTermPowerLaw(date, latestByCurrency.powerLawQ01),
+                powerLawQ50: predictSingleTermPowerLaw(date, latestByCurrency.powerLawQ50),
+                powerLawQ99: predictSingleTermPowerLaw(date, latestByCurrency.powerLawQ99)
+            };
 
         return {
             timestamp,
@@ -465,9 +486,9 @@ function enrichMarketPricesWithMovingAverages(priceData, rows) {
             sma50d: sma50d ?? null,
             sma200d: sma200d ?? null,
             sma200w: sma200w ?? null,
-            powerLawQ01: powerLawQ01 ?? null,
-            powerLawQ50: powerLawQ50 ?? null,
-            powerLawQ99: powerLawQ99 ?? null
+            powerLawQ01: pricePowerLaws?.powerLawQ01 ?? row?.[`powerLawQ01${currencySuffix}`] ?? null,
+            powerLawQ50: pricePowerLaws?.powerLawQ50 ?? row?.[`powerLawQ50${currencySuffix}`] ?? null,
+            powerLawQ99: pricePowerLaws?.powerLawQ99 ?? row?.[`powerLawQ99${currencySuffix}`] ?? null
         };
     });
 }
@@ -505,10 +526,29 @@ function extendSeriesWithProjection(priceData) {
 
     const projected = [...priceData];
     const dayMs = 24 * 60 * 60 * 1000;
-    for (let ts = lastTimestamp + dayMs; ts <= targetTimestamp; ts += dayMs) {
+    let ts = new Date(lastTimestamp);
+    ts.setUTCHours(0, 0, 0, 0);
+    ts = ts.getTime() + dayMs;
+    while (ts <= targetTimestamp) {
         const dateString = new Date(ts).toISOString().slice(0, 10);
         projected.push({
             timestamp: ts,
+            price: null,
+            sma50d: null,
+            sma200d: null,
+            sma200w: null,
+            powerLawQ01: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ01),
+            powerLawQ50: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ50),
+            powerLawQ99: predictSingleTermPowerLaw(dateString, projectionParams.powerLawQ99),
+            isProjected: true
+        });
+        ts += dayMs;
+    }
+
+    if (projected.at(-1).timestamp < targetTimestamp) {
+        const dateString = new Date(targetTimestamp).toISOString().slice(0, 10);
+        projected.push({
+            timestamp: targetTimestamp,
             price: null,
             sma50d: null,
             sma200d: null,
