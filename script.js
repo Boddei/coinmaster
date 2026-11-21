@@ -68,7 +68,7 @@ const CONFIG = {
             key: 'capitalb',
             displayName: 'Capital B',
             cebeTicker: 'ALCPB',
-            quoteSymbol: 'CAPB.PA',
+            quoteSymbol: 'ALCPBP.XC',
             aliases: ['capital b', 'capitalb'],
             fallbackBtcHoldings: null,
             fallbackSharesOutstanding: 2_930_000,
