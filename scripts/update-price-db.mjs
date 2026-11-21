@@ -4,6 +4,7 @@ const DB_PATH = 'data/btc_daily_prices.csv';
 const POWERLAW_START_DATE = '2010-07-18';
 const COIN = 'bitcoin';
 const API_BASE = 'https://api.coingecko.com/api/v3';
+const REALIZED_PRICE_API = 'https://data.explore21.com/v1/metrics/bitcoin-realized-price';
 const GENESIS_DATE = '2009-01-03';
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const POWERLAW_SEEDS = {
@@ -57,18 +58,35 @@ async function loadExistingRows() {
     const idxDate = header.indexOf('date');
     const idxEur = header.indexOf('close_eur');
     const idxUsd = header.indexOf('close_usd');
+    const idxRealizedEur = header.indexOf('realized_price_eur');
+    const idxRealizedUsd = header.indexOf('realized_price_usd');
 
     return rows.slice(1).map((line) => {
       const values = line.split(',');
       return {
         date: values[idxDate],
         closeEur: Number(values[idxEur]),
-        closeUsd: Number(values[idxUsd])
+        closeUsd: Number(values[idxUsd]),
+        realizedPriceEur: Number(values[idxRealizedEur]),
+        realizedPriceUsd: Number(values[idxRealizedUsd])
       };
     }).filter((row) => row.date && Number.isFinite(row.closeEur) && Number.isFinite(row.closeUsd));
   } catch {
     return [];
   }
+}
+
+async function fetchRealizedPriceHistory() {
+  const response = await fetch(REALIZED_PRICE_API);
+  if (!response.ok) {
+    throw new Error(`Explore21 Realized-Price API Fehler: ${response.status}`);
+  }
+
+  const payload = await response.json();
+  const rows = Array.isArray(payload.data) ? payload.data : [];
+  return new Map(rows
+    .filter((row) => row.date && Number.isFinite(Number(row.realized_price_usd)))
+    .map((row) => [row.date, Number(row.realized_price_usd)]));
 }
 
 function rollingAverage(values, windowSize) {
@@ -178,6 +196,13 @@ function safeRatio(numerator, denominator) {
 async function main() {
   const existing = await loadExistingRows();
   const lastDate = existing.length > 0 ? existing[existing.length - 1].date : '2010-01-01';
+  const realizedPriceByDate = new Map();
+  try {
+    for (const [date, value] of await fetchRealizedPriceHistory()) realizedPriceByDate.set(date, value);
+  } catch (error) {
+    console.warn(`Konnte Realized-Price-Daten nicht laden: ${error.message}`);
+  }
+
   const todayUtc = new Date().toISOString().slice(0, 10);
   const overlapStart = new Date(`${lastDate}T00:00:00Z`);
   overlapStart.setUTCDate(overlapStart.getUTCDate() - 7);
@@ -205,7 +230,7 @@ async function main() {
     const eur = eurDaily.get(date);
     const usd = usdDaily.get(date);
     if (date >= todayUtc || eur == null || usd == null) continue;
-    rowsByDate.set(date, { date, closeEur: eur, closeUsd: usd });
+    rowsByDate.set(date, { ...rowsByDate.get(date), date, closeEur: eur, closeUsd: usd });
     if (date >= fetchStart) updatedRows += 1;
   }
 
@@ -213,6 +238,13 @@ async function main() {
     .filter((row) => row.date < todayUtc)
     .sort((a, b) => a.date.localeCompare(b.date));
   const newRows = Array.from(rowsByDate.keys()).filter((date) => !existing.some((row) => row.date === date)).length;
+  for (const row of mergedRows) {
+    const realizedPriceUsd = realizedPriceByDate.get(row.date);
+    if (Number.isFinite(realizedPriceUsd)) row.realizedPriceUsd = realizedPriceUsd;
+    if (Number.isFinite(row.realizedPriceUsd) && Number.isFinite(row.closeEur) && row.closeUsd > 0) {
+      row.realizedPriceEur = row.realizedPriceUsd * (row.closeEur / row.closeUsd);
+    }
+  }
   if (mergedRows.length === 0) {
     console.log('Keine Daten verfügbar.');
     return;
@@ -241,7 +273,7 @@ async function main() {
   console.log(`EUR Power-Law Parameter: q01(alpha=${q01.alpha.toFixed(6)}, beta=${q01.beta.toFixed(6)}), q50(alpha=${q50.alpha.toFixed(6)}, beta=${q50.beta.toFixed(6)}), q99(alpha=${q99.alpha.toFixed(6)}, beta=${q99.beta.toFixed(6)})`);
   console.log(`USD Power-Law Parameter: q01(alpha=${q01Usd.alpha.toFixed(6)}, beta=${q01Usd.beta.toFixed(6)}), q50(alpha=${q50Usd.alpha.toFixed(6)}, beta=${q50Usd.beta.toFixed(6)}), q99(alpha=${q99Usd.alpha.toFixed(6)}, beta=${q99Usd.beta.toFixed(6)})`);
 
-  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd';
+  const header = 'date,close_eur,close_usd,sma50d_eur,sma200d_eur,sma200w_eur,sma200w_factor_eur,sma50d_usd,sma200d_usd,sma200w_usd,sma200w_factor_usd,powerlaw_q01_eur,powerlaw_q50_eur,powerlaw_q99_eur,powerlaw_factor_eur,powerlaw_q01_usd,powerlaw_q50_usd,powerlaw_q99_usd,powerlaw_factor_usd,realized_price_eur,realized_price_usd';
   const serializedRows = mergedRows.map((row, index) => {
     const ma50Eur = sma50Eur[index] != null ? sma50Eur[index].toFixed(2) : '';
     const ma200Eur = sma200Eur[index] != null ? sma200Eur[index].toFixed(2) : '';
@@ -259,7 +291,9 @@ async function main() {
     const plQ50Usd = predictPowerLaw(row.date, q50Usd.alpha, q50Usd.beta).toFixed(2);
     const plQ99Usd = predictPowerLaw(row.date, q99Usd.alpha, q99Usd.beta).toFixed(2);
     const powerLawFactorUsd = safeRatio(row.closeUsd - Number(plQ01Usd), Number(plQ99Usd) - Number(plQ01Usd));
-    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd}`;
+    const realizedPriceEur = Number.isFinite(row.realizedPriceEur) ? row.realizedPriceEur.toFixed(2) : '';
+    const realizedPriceUsd = Number.isFinite(row.realizedPriceUsd) ? row.realizedPriceUsd.toFixed(2) : '';
+    return `${row.date},${row.closeEur.toFixed(2)},${row.closeUsd.toFixed(2)},${ma50Eur},${ma200Eur},${ma200wEur},${sma200wFactorEur},${ma50Usd},${ma200Usd},${ma200wUsd},${sma200wFactorUsd},${plQ01Eur},${plQ50Eur},${plQ99Eur},${powerLawFactorEur},${plQ01Usd},${plQ50Usd},${plQ99Usd},${powerLawFactorUsd},${realizedPriceEur},${realizedPriceUsd}`;
   });
 
   const merged = [header, ...serializedRows].join('\n') + '\n';
