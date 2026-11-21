@@ -393,6 +393,26 @@ body {
     background: rgba(16, 185, 129, 0.14);
 }
 
+.ma-btn[data-ma="realizedPrice"] {
+    border-color: #06b6d4;
+    color: #06b6d4;
+}
+
+.ma-btn[data-ma="realizedPrice"].active {
+    background: rgba(6, 182, 212, 0.14);
+}
+
+.chart-data-attribution {
+    margin-left: auto;
+    align-self: center;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    text-decoration: none;
+}
+
+.chart-data-attribution:hover {
+    text-decoration: underline;
+}
 
 /* Data Section */
 .data-description {
