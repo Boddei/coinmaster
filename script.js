@@ -2321,7 +2321,11 @@ function escapeHtml(value = '') {
 async function loadTreasuryCompanies() {
     try {
         const [quoteResult, bitcoinQuantResult, treasuryResult, cebeResult] = await Promise.allSettled([
-            fetch(getYahooQuoteUrl(CONFIG.treasuryCompanies.map((company) => company.quoteSymbol))),
+            fetch(getYahooQuoteUrl([
+                ...CONFIG.treasuryCompanies.map((company) => company.quoteSymbol),
+                'EURUSD=X',
+                'JPY=X'
+            ])),
             fetchBitcoinQuantTreasuryData(),
             fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`),
             fetch(CONFIG.cebeTracker.companiesUrl)
@@ -2346,13 +2350,17 @@ async function loadTreasuryCompanies() {
         const coingeckoCompanies = Array.isArray(treasuryPayload?.companies) ? treasuryPayload.companies : [];
         const holdingsMap = mapHoldingsByName([...bitcoinQuantCompanies, ...coingeckoCompanies]);
         const cebeCompanies = mapCebeCompanies(cebePayload?.companies);
+        const fxRates = {
+            usdPerEur: toFiniteNumber(quoteMap.get('EURUSD=X')?.regularMarketPrice),
+            jpyPerUsd: toFiniteNumber(quoteMap.get('JPY=X')?.regularMarketPrice)
+        };
 
         CONFIG.treasuryCompanies.forEach((company) => {
             const quote = quoteMap.get(company.quoteSymbol.toUpperCase()) || null;
             const cebeCompany = cebeCompanies.get(company.cebeTicker);
             const cebeHoldings = toFiniteNumber(cebeCompany?.btc_holdings);
             const holdings = cebeHoldings ?? resolveHoldings(holdingsMap, company);
-            renderTreasuryCompany(company, quote, holdings, cebeCompany);
+            renderTreasuryCompany(company, quote, holdings, cebeCompany, fxRates);
         });
 
         const updatedElement = document.getElementById('treasuryUpdated');
@@ -2483,7 +2491,16 @@ function normalizeCompanyName(value = '') {
         .replace(/[^a-z0-9]/g, '');
 }
 
-function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null) {
+function convertQuotePriceToUsd(price, currency, fxRates) {
+    if (price === null) return null;
+    const normalizedCurrency = String(currency || 'USD').toUpperCase();
+    if (normalizedCurrency === 'USD') return price;
+    if (normalizedCurrency === 'EUR' && fxRates.usdPerEur) return price * fxRates.usdPerEur;
+    if (normalizedCurrency === 'JPY' && fxRates.jpyPerUsd) return price / fxRates.jpyPerUsd;
+    return null;
+}
+
+function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null, fxRates = {}) {
     const suffix = toDomSuffix(company.key);
     const priceEl = document.getElementById(`treasuryPrice${suffix}`);
     const btcEl = document.getElementById(`treasuryBtc${suffix}`);
@@ -2492,28 +2509,22 @@ function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null) 
     const yieldEl = document.getElementById(`treasuryYield${suffix}`);
     if (!priceEl || !btcEl || !nmavEl || !amplificationEl || !yieldEl) return;
 
-    const cebeStockPrice = toFiniteNumber(cebeCompany?.stock_price);
-    const yahooStockPrice = toFiniteNumber(quote?.regularMarketPrice);
-    const regularMarketPrice = cebeStockPrice ?? yahooStockPrice;
-    // CEBE does not publish the daily percentage move, so only pair a Yahoo move with a Yahoo price.
-    const changePercent = cebeStockPrice === null
-        ? toFiniteNumber(quote?.regularMarketChangePercent)
-        : null;
-    const currency = cebeStockPrice !== null ? 'USD' : (quote?.currency || 'USD');
-
-    if (regularMarketPrice !== null) {
-        const priceLabel = formatCurrency(regularMarketPrice, currency);
-        const changeLabel = changePercent !== null
-            ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`
-            : '-';
-        const changeClass = changePercent !== null
-            ? `treasury-price-change ${changePercent >= 0 ? 'positive' : 'negative'}`
-            : 'treasury-price-change';
-
-        priceEl.innerHTML = `${priceLabel}<div class="${changeClass}">${changeLabel}</div>`;
-    } else {
-        priceEl.textContent = 'Nicht verfügbar';
-    }
+    // Yahoo Finance supplies a consistent stock quote and daily percentage move for all four companies.
+    const nativePrice = toFiniteNumber(quote?.regularMarketPrice);
+    const currency = quote?.currency || 'USD';
+    const priceUsd = convertQuotePriceToUsd(nativePrice, currency, fxRates);
+    const priceEur = priceUsd !== null && fxRates.usdPerEur
+        ? priceUsd / fxRates.usdPerEur
+        : (String(currency).toUpperCase() === 'EUR' ? nativePrice : null);
+    const priceLabel = `${priceUsd !== null ? priceUsd.toFixed(2) : '—'} $ / ${priceEur !== null ? priceEur.toFixed(2) : '—'} €`;
+    const changePercent = toFiniteNumber(quote?.regularMarketChangePercent);
+    const changeLabel = changePercent !== null
+        ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`
+        : '—';
+    const changeClass = changePercent !== null
+        ? `treasury-price-change ${changePercent >= 0 ? 'positive' : 'negative'}`
+        : 'treasury-price-change';
+    priceEl.innerHTML = `${priceLabel}<div class="${changeClass}">${changeLabel}</div>`;
 
     btcEl.textContent = Number.isFinite(btcHoldings)
         ? `${formatBtcAmount(btcHoldings)} BTC`
@@ -2522,13 +2533,12 @@ function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null) 
     const sharesOutstanding = toFiniteNumber(cebeCompany?.basic_shares)
         ?? toFiniteNumber(quote?.sharesOutstanding)
         ?? toFiniteNumber(company.fallbackSharesOutstanding);
-    const marketCapFromShares = regularMarketPrice !== null && sharesOutstanding !== null && sharesOutstanding > 0
-        ? regularMarketPrice * sharesOutstanding
+    const marketCapFromShares = priceUsd !== null && sharesOutstanding !== null && sharesOutstanding > 0
+        ? priceUsd * sharesOutstanding
         : null;
-    const cebeMarketCap = cebeStockPrice !== null ? toFiniteNumber(cebeCompany?.market_cap_usd) : null;
-    const marketCap = cebeMarketCap
-        ?? toFiniteNumber(quote?.marketCap)
-        ?? marketCapFromShares;
+    const marketCapCurrency = String(quote?.currency || 'USD').toUpperCase();
+    const quoteMarketCap = convertQuotePriceToUsd(toFiniteNumber(quote?.marketCap), marketCapCurrency, fxRates);
+    const marketCap = quoteMarketCap ?? marketCapFromShares;
     const bitcoinNavUsd = Number.isFinite(btcHoldings) && Number.isFinite(latestBitcoinPriceUsd)
         ? btcHoldings * latestBitcoinPriceUsd
         : null;
