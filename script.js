@@ -276,6 +276,71 @@ const chartDragZoomPlugin = {
     }
 };
 
+const BITCOIN_HALVING_MARKERS = [
+    { date: '2012-11-28', timestamp: Date.parse('2012-11-28T00:00:00Z') },
+    { date: '2016-07-09', timestamp: Date.parse('2016-07-09T00:00:00Z') },
+    { date: '2020-05-11', timestamp: Date.parse('2020-05-11T00:00:00Z') },
+    { date: '2024-04-20', timestamp: Date.parse('2024-04-20T00:00:00Z') }
+];
+
+const halvingDateMarkersPlugin = {
+    id: 'halvingDateMarkers',
+    afterDatasetsDraw(chart, _args, options) {
+        if (!['btcChart', 'realValueChart'].includes(chart.canvas?.id)) return;
+        const timestamps = options.timestamps;
+        const xScale = chart.scales.x;
+        const area = chart.chartArea;
+        if (!Array.isArray(timestamps) || timestamps.length === 0 || !xScale || !area) return;
+
+        const minIndex = Math.max(0, Math.floor(Number.isFinite(xScale.min) ? xScale.min : 0));
+        const maxIndex = Math.min(
+            timestamps.length - 1,
+            Math.ceil(Number.isFinite(xScale.max) ? xScale.max : timestamps.length - 1)
+        );
+        const firstVisibleTimestamp = timestamps[minIndex];
+        const lastVisibleTimestamp = timestamps[maxIndex];
+        if (!Number.isFinite(firstVisibleTimestamp) || !Number.isFinite(lastVisibleTimestamp)) return;
+
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.48)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([5, 6]);
+
+        for (const marker of BITCOIN_HALVING_MARKERS) {
+            if (marker.timestamp < firstVisibleTimestamp || marker.timestamp > lastVisibleTimestamp) continue;
+
+            let low = minIndex;
+            let high = maxIndex;
+            while (low < high) {
+                const middle = Math.floor((low + high) / 2);
+                if (timestamps[middle] < marker.timestamp) low = middle + 1;
+                else high = middle;
+            }
+
+            let markerIndex = low;
+            if (timestamps[low] > marker.timestamp && low > minIndex) {
+                const previousIndex = low - 1;
+                const previousTimestamp = timestamps[previousIndex];
+                const nextTimestamp = timestamps[low];
+                const interval = nextTimestamp - previousTimestamp;
+                if (Number.isFinite(previousTimestamp) && Number.isFinite(nextTimestamp) && interval > 0) {
+                    markerIndex = previousIndex + ((marker.timestamp - previousTimestamp) / interval);
+                }
+            }
+
+            const x = xScale.getPixelForValue(markerIndex);
+            if (!Number.isFinite(x) || x < area.left || x > area.right) continue;
+            ctx.beginPath();
+            ctx.moveTo(x, area.top);
+            ctx.lineTo(x, area.bottom);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+};
+
 Chart.register(powerLawFormulaOverlayPlugin, chartDragZoomPlugin);
 
 // Initialize
@@ -925,6 +990,9 @@ function updateChart(priceData) {
                 },
                 powerLawFormulaOverlay: {
                     formulas: powerLawFormulas
+                },
+                halvingDateMarkers: {
+                    timestamps: priceData.map((point) => Number(point.timestamp))
                 },
                 tooltip: {
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -1763,6 +1831,11 @@ function updateRealValueChart() {
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 legend: { display: false },
+                halvingDateMarkers: {
+                    timestamps: rows.map((row) => Number.isFinite(row.timestamp)
+                        ? row.timestamp
+                        : Date.parse(`${row.date}T00:00:00Z`))
+                },
                 tooltip: {
                     callbacks: {
                         label: (context) => {
