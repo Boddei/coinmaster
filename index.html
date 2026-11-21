@@ -83,7 +83,13 @@
         <!-- Chart Section -->
         <section class="section chart-section" data-stage="chart">
             <div class="chart-header">
-                <h2 class="chart-header-title">Bitcoin vs Fiat</h2>
+                <div class="chart-header-title chart-header-summary">
+                    <h2>Bitcoin vs Fiat</h2>
+                    <div class="chart-period-change" aria-live="polite">
+                        <span class="chart-period-change-label">Veränderung im Zeitraum</span>
+                        <strong class="chart-period-change-value" id="btcChartPeriodChangeValue">—</strong>
+                    </div>
+                </div>
                 <div class="chart-header-controls">
                     <div class="chart-control-row chart-timeframes" aria-label="Zeitraum des Bitcoin-Charts">
                         <button class="chart-btn" data-days="1">1T</button>
@@ -126,9 +132,13 @@
         <!-- Real value comparison -->
         <section class="section chart-section real-value-section" data-stage="real-value" data-active-currency="gold">
             <div class="chart-header real-value-header">
-                <div class="chart-header-title">
+                <div class="chart-header-title chart-header-summary">
                     <h2>Bitcoin vs Real Values</h2>
                     <p class="real-value-subtitle">BTC-Kurs ausgedrückt in Gold (Feinunzen) oder MSCI World (Indexpunkten).</p>
+                    <div class="chart-period-change" aria-live="polite">
+                        <span class="chart-period-change-label">Veränderung im Zeitraum</span>
+                        <strong class="chart-period-change-value" id="realValueChartPeriodChangeValue">—</strong>
+                    </div>
                 </div>
                 <div class="chart-header-controls">
                     <div class="chart-control-row chart-timeframes" aria-label="Zeitraum des Real-Values-Charts">
@@ -434,6 +444,6 @@
         </footer>
     </div>
 
-    <script src="script.js?v=20261121-halvings-v2"></script>
+    <script src="script.js?v=20261121-period-change"></script>
 </body>
 </html>
