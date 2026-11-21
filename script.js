@@ -434,6 +434,7 @@ function buildFallbackChartSeries(rows, days) {
     const powerLawQ01Key = currentChartCurrency === 'usd' ? 'powerLawQ01Usd' : 'powerLawQ01Eur';
     const powerLawQ50Key = currentChartCurrency === 'usd' ? 'powerLawQ50Usd' : 'powerLawQ50Eur';
     const powerLawQ99Key = currentChartCurrency === 'usd' ? 'powerLawQ99Usd' : 'powerLawQ99Eur';
+    const realizedPriceKey = currentChartCurrency === 'usd' ? 'realizedPriceUsd' : 'realizedPriceEur';
 
     return usableRows.map(row => ({
         timestamp: Date.parse(`${row.date}T00:00:00Z`),
@@ -443,7 +444,8 @@ function buildFallbackChartSeries(rows, days) {
         sma200w: row[sma200wKey],
         powerLawQ01: row[powerLawQ01Key],
         powerLawQ50: row[powerLawQ50Key],
-        powerLawQ99: row[powerLawQ99Key]
+        powerLawQ99: row[powerLawQ99Key],
+        realizedPrice: row[realizedPriceKey]
     }));
 }
 
