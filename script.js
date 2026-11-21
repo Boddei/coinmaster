@@ -13,6 +13,9 @@ const CONFIG = {
             'https://bitcoinquant.co/api/bitcoin-treasuries'
         ]
     },
+    cebeTracker: {
+        companiesUrl: 'https://cebetracker.io/api/v1/companies.json'
+    },
     refreshInterval: 60000, // 1 minute
     chartDays: 7,
     localPriceDbPath: 'data/btc_daily_prices.csv',
@@ -23,6 +26,7 @@ const CONFIG = {
             key: 'strategy',
             displayName: 'Strategy',
             quoteSymbol: 'MSTR',
+            cebeTicker: 'MSTR',
             aliases: ['strategy', 'microstrategy'],
             fallbackBtcHoldings: 499226,
             fallbackSharesOutstanding: 20_900_000,
@@ -36,6 +40,7 @@ const CONFIG = {
             key: 'metaplanet',
             displayName: 'Metaplanet',
             quoteSymbol: '3350.T',
+            cebeTicker: 'MTPLF',
             aliases: ['metaplanet'],
             fallbackBtcHoldings: 2235,
             fallbackSharesOutstanding: 539_200_000,
@@ -46,8 +51,23 @@ const CONFIG = {
             sourceUrl: 'https://analytics.metaplanet.jp/?tab=home'
         },
         {
+            key: 'strive',
+            displayName: 'Strive',
+            quoteSymbol: 'ASST',
+            cebeTicker: 'ASST',
+            aliases: ['strive'],
+            fallbackBtcHoldings: null,
+            fallbackSharesOutstanding: null,
+            satsPerShare1yAgo: null,
+            satsPerShareNow: null,
+            fallbackNmav: null,
+            fallbackAmplification: null,
+            sourceUrl: 'https://strive.com/'
+        },
+        {
             key: 'capitalb',
             displayName: 'Capital B',
+            cebeTicker: 'ALCPB',
             quoteSymbol: 'CAPB.PA',
             aliases: ['capital b', 'capitalb'],
             fallbackBtcHoldings: null,
@@ -2300,45 +2320,47 @@ function escapeHtml(value = '') {
 
 async function loadTreasuryCompanies() {
     try {
-        const [quoteResult, bitcoinQuantResult, treasuryResult] = await Promise.allSettled([
+        const [quoteResult, bitcoinQuantResult, treasuryResult, cebeResult] = await Promise.allSettled([
             fetch(getYahooQuoteUrl(CONFIG.treasuryCompanies.map((company) => company.quoteSymbol))),
             fetchBitcoinQuantTreasuryData(),
-            fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`)
+            fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`),
+            fetch(CONFIG.cebeTracker.companiesUrl)
         ]);
 
         const quoteResponse = quoteResult.status === 'fulfilled' ? quoteResult.value : null;
         const bitcoinQuantPayload = bitcoinQuantResult.status === 'fulfilled' ? bitcoinQuantResult.value : null;
         const treasuryResponse = treasuryResult.status === 'fulfilled' ? treasuryResult.value : null;
+        const cebeResponse = cebeResult.status === 'fulfilled' ? cebeResult.value : null;
 
-        if (quoteResult.status === 'rejected') {
-            console.warn('Yahoo Quote API nicht erreichbar:', quoteResult.reason);
-        }
+        if (quoteResult.status === 'rejected') console.warn('Yahoo Quote API nicht erreichbar:', quoteResult.reason);
+        if (bitcoinQuantResult.status === 'rejected') console.warn('BitcoinQuant Treasury Feed nicht erreichbar:', bitcoinQuantResult.reason);
+        if (treasuryResult.status === 'rejected') console.warn('CoinGecko Treasury API nicht erreichbar:', treasuryResult.reason);
+        if (cebeResult.status === 'rejected') console.warn('CEBE Tracker Feed nicht erreichbar:', cebeResult.reason);
 
-        if (bitcoinQuantResult.status === 'rejected') {
-            console.warn('BitcoinQuant Treasury Feed nicht erreichbar:', bitcoinQuantResult.reason);
-        }
-
-        if (treasuryResult.status === 'rejected') {
-            console.warn('CoinGecko Treasury API nicht erreichbar:', treasuryResult.reason);
-        }
-
-        const quotePayload = (quoteResponse && quoteResponse.ok) ? await quoteResponse.json() : null;
-        const treasuryPayload = (treasuryResponse && treasuryResponse.ok) ? await treasuryResponse.json() : null;
+        const quotePayload = quoteResponse?.ok ? await quoteResponse.json() : null;
+        const treasuryPayload = treasuryResponse?.ok ? await treasuryResponse.json() : null;
+        const cebePayload = cebeResponse?.ok ? await cebeResponse.json() : null;
 
         const quoteMap = mapQuotesBySymbol(quotePayload?.quoteResponse?.result || []);
         const bitcoinQuantCompanies = parseBitcoinQuantCompanies(bitcoinQuantPayload);
         const coingeckoCompanies = Array.isArray(treasuryPayload?.companies) ? treasuryPayload.companies : [];
         const holdingsMap = mapHoldingsByName([...bitcoinQuantCompanies, ...coingeckoCompanies]);
+        const cebeCompanies = mapCebeCompanies(cebePayload?.companies);
 
         CONFIG.treasuryCompanies.forEach((company) => {
             const quote = quoteMap.get(company.quoteSymbol.toUpperCase()) || null;
-            const holdings = resolveHoldings(holdingsMap, company);
-            renderTreasuryCompany(company, quote, holdings);
+            const cebeCompany = cebeCompanies.get(company.cebeTicker);
+            const cebeHoldings = toFiniteNumber(cebeCompany?.btc_holdings);
+            const holdings = cebeHoldings ?? resolveHoldings(holdingsMap, company);
+            renderTreasuryCompany(company, quote, holdings, cebeCompany);
         });
 
         const updatedElement = document.getElementById('treasuryUpdated');
         if (updatedElement) {
-            updatedElement.textContent = new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+            const asOf = cebePayload?.as_of ? new Date(cebePayload.as_of) : null;
+            updatedElement.textContent = asOf && Number.isFinite(asOf.getTime())
+                ? `CEBE-Feed: ${asOf.toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}`
+                : `Abruf: ${new Date().toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}`;
         }
     } catch (error) {
         console.error('Fehler beim Laden der Treasury-Unternehmen:', error);
@@ -2425,6 +2447,22 @@ function mapHoldingsByName(companies = []) {
     return map;
 }
 
+function mapCebeCompanies(companies = []) {
+    const map = new Map();
+    companies.forEach((company) => {
+        if (typeof company?.ticker === 'string') {
+            map.set(company.ticker.toUpperCase(), company);
+        }
+    });
+    return map;
+}
+
+function toFiniteNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
 function resolveHoldings(holdingsMap, companyConfig) {
     const aliases = [companyConfig.displayName, ...(companyConfig.aliases || [])];
     for (const alias of aliases) {
@@ -2445,7 +2483,7 @@ function normalizeCompanyName(value = '') {
         .replace(/[^a-z0-9]/g, '');
 }
 
-function renderTreasuryCompany(company, quote, btcHoldings) {
+function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null) {
     const suffix = toDomSuffix(company.key);
     const priceEl = document.getElementById(`treasuryPrice${suffix}`);
     const btcEl = document.getElementById(`treasuryBtc${suffix}`);
@@ -2454,17 +2492,21 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
     const yieldEl = document.getElementById(`treasuryYield${suffix}`);
     if (!priceEl || !btcEl || !nmavEl || !amplificationEl || !yieldEl) return;
 
-    const regularMarketPrice = Number(quote?.regularMarketPrice);
-    const changePercent = Number(quote?.regularMarketChangePercent);
-    const currency = quote?.currency || 'USD';
+    const cebeStockPrice = toFiniteNumber(cebeCompany?.stock_price);
+    const yahooStockPrice = toFiniteNumber(quote?.regularMarketPrice);
+    const regularMarketPrice = cebeStockPrice ?? yahooStockPrice;
+    // CEBE does not publish the daily percentage move, so only pair a Yahoo move with a Yahoo price.
+    const changePercent = cebeStockPrice === null
+        ? toFiniteNumber(quote?.regularMarketChangePercent)
+        : null;
+    const currency = cebeStockPrice !== null ? 'USD' : (quote?.currency || 'USD');
 
-    if (Number.isFinite(regularMarketPrice)) {
+    if (regularMarketPrice !== null) {
         const priceLabel = formatCurrency(regularMarketPrice, currency);
-        const hasChange = Number.isFinite(changePercent);
-        const changeLabel = hasChange
+        const changeLabel = changePercent !== null
             ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%`
             : '-';
-        const changeClass = hasChange
+        const changeClass = changePercent !== null
             ? `treasury-price-change ${changePercent >= 0 ? 'positive' : 'negative'}`
             : 'treasury-price-change';
 
@@ -2477,49 +2519,48 @@ function renderTreasuryCompany(company, quote, btcHoldings) {
         ? `${formatBtcAmount(btcHoldings)} BTC`
         : 'Nicht verfügbar';
 
-    const sharesOutstanding = Number.isFinite(Number(quote?.sharesOutstanding))
-        ? Number(quote.sharesOutstanding)
-        : company.fallbackSharesOutstanding;
-    const marketCapFromShares = Number.isFinite(regularMarketPrice) && Number.isFinite(sharesOutstanding) && sharesOutstanding > 0
+    const sharesOutstanding = toFiniteNumber(cebeCompany?.basic_shares)
+        ?? toFiniteNumber(quote?.sharesOutstanding)
+        ?? toFiniteNumber(company.fallbackSharesOutstanding);
+    const marketCapFromShares = regularMarketPrice !== null && sharesOutstanding !== null && sharesOutstanding > 0
         ? regularMarketPrice * sharesOutstanding
         : null;
-    const marketCap = Number.isFinite(Number(quote?.marketCap))
-        ? Number(quote.marketCap)
-        : marketCapFromShares;
+    const cebeMarketCap = cebeStockPrice !== null ? toFiniteNumber(cebeCompany?.market_cap_usd) : null;
+    const marketCap = cebeMarketCap
+        ?? toFiniteNumber(quote?.marketCap)
+        ?? marketCapFromShares;
     const bitcoinNavUsd = Number.isFinite(btcHoldings) && Number.isFinite(latestBitcoinPriceUsd)
         ? btcHoldings * latestBitcoinPriceUsd
         : null;
 
-    const computedMnav = Number.isFinite(marketCap) && Number.isFinite(bitcoinNavUsd) && bitcoinNavUsd > 0
+    const computedMnav = marketCap !== null && Number.isFinite(bitcoinNavUsd) && bitcoinNavUsd > 0
         ? marketCap / bitcoinNavUsd
         : null;
-    const mnav = Number.isFinite(computedMnav) ? computedMnav : Number(company.fallbackNmav);
+    const mnav = computedMnav ?? toFiniteNumber(company.fallbackNmav);
+    nmavEl.textContent = mnav !== null ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
 
-    nmavEl.textContent = Number.isFinite(mnav) ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
-
-    const btcPerShare = Number.isFinite(btcHoldings) && Number.isFinite(sharesOutstanding) && sharesOutstanding > 0
+    const btcPerShare = Number.isFinite(btcHoldings) && sharesOutstanding !== null && sharesOutstanding > 0
         ? btcHoldings / sharesOutstanding
         : null;
-    const satsPerShareNow = Number.isFinite(Number(company.satsPerShareNow))
-        ? Number(company.satsPerShareNow)
-        : (Number.isFinite(btcPerShare) ? btcPerShare * 100_000_000 : null);
-    const satsPerShare1yAgo = Number(company.satsPerShare1yAgo);
-    const btcYield = Number.isFinite(satsPerShareNow) && Number.isFinite(satsPerShare1yAgo) && satsPerShare1yAgo > 0
+    const satsPerShareNow = toFiniteNumber(company.satsPerShareNow)
+        ?? (btcPerShare !== null ? btcPerShare * 100_000_000 : null);
+    const satsPerShare1yAgo = toFiniteNumber(company.satsPerShare1yAgo);
+    const btcYield = satsPerShareNow !== null && satsPerShare1yAgo !== null && satsPerShare1yAgo > 0
         ? ((satsPerShareNow / satsPerShare1yAgo) - 1) * 100
         : null;
 
-    if (Number.isFinite(btcYield)) {
+    if (btcYield !== null) {
         const yieldClass = btcYield >= 0 ? 'positive' : 'negative';
         yieldEl.innerHTML = `<span class="treasury-price-change ${yieldClass}">${btcYield >= 0 ? '+' : ''}${btcYield.toFixed(1)}%</span>`;
     } else {
         yieldEl.textContent = 'Nicht verfügbar';
     }
 
-    const computedAmplification = Number.isFinite(mnav) && Number.isFinite(btcYield)
+    const computedAmplification = mnav !== null && btcYield !== null
         ? mnav * (1 + (btcYield / 100))
         : null;
-    const amplification = Number.isFinite(computedAmplification) ? computedAmplification : Number(company.fallbackAmplification);
-    amplificationEl.textContent = Number.isFinite(amplification) ? `${amplification.toFixed(2)}x` : 'Nicht verfügbar';
+    const amplification = computedAmplification ?? toFiniteNumber(company.fallbackAmplification);
+    amplificationEl.textContent = amplification !== null ? `${amplification.toFixed(2)}x` : 'Nicht verfügbar';
 }
 
 function renderTreasuryFallback() {
