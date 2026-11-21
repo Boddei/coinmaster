@@ -1135,3 +1135,41 @@ body {
     color: var(--text-secondary);
     font-size: 0.8rem;
 }
+
+
+/* Visible change summaries above the main charts */
+.chart-header-summary {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    min-width: 220px;
+}
+
+.chart-period-change {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.chart-period-change-label {
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    line-height: 1.2;
+}
+
+.chart-period-change-value {
+    color: var(--text-primary);
+    font-size: 1.08rem;
+    font-weight: 700;
+    line-height: 1.25;
+    font-variant-numeric: tabular-nums;
+}
+
+.chart-period-change-value.is-positive {
+    color: var(--green);
+}
+
+.chart-period-change-value.is-negative {
+    color: var(--red);
+}
