@@ -1121,3 +1121,17 @@ body {
         font-size: 0.75rem;
     }
 }
+
+
+/* Drag-to-zoom for the two main market charts */
+#btcChart,
+#realValueChart {
+    cursor: crosshair;
+    touch-action: none;
+}
+
+.chart-zoom-hint {
+    margin: 8px 2px 0;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
