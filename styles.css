@@ -1002,3 +1002,122 @@ body {
         height: 300px;
     }
 }
+
+
+/* Bitcoin-style lazy section controls */
+.section.section-collapsible {
+    padding: 14px;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.section-collapse-toggle {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    color: var(--text-primary);
+    text-align: left;
+    background: linear-gradient(110deg, rgba(247, 147, 26, 0.12), rgba(247, 147, 26, 0.025) 42%, var(--bg-card));
+    border: 1px solid rgba(247, 147, 26, 0.42);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.section-collapse-toggle:hover,
+.section-collapsible.is-expanded > .section-collapse-toggle {
+    border-color: var(--accent-orange);
+    background: linear-gradient(110deg, rgba(247, 147, 26, 0.2), rgba(247, 147, 26, 0.06) 48%, var(--bg-card));
+}
+
+.section-collapse-toggle:hover {
+    transform: translateY(-1px);
+}
+
+.section-toggle-coin {
+    display: inline-flex;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #ffc46b;
+    border-radius: 50%;
+    color: #211306;
+    background: linear-gradient(145deg, #ffd27a, #f7931a 72%);
+    box-shadow: 0 0 14px rgba(247, 147, 26, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.55);
+    font-family: Arial, sans-serif;
+    font-size: 21px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.section-toggle-title {
+    flex: 1 1 auto;
+    font-size: 1.12rem;
+    font-weight: 700;
+}
+
+.section-toggle-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border: 1px solid rgba(247, 147, 26, 0.35);
+    border-radius: 999px;
+    color: #ffc46b;
+    background: rgba(247, 147, 26, 0.08);
+    font-size: 0.82rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.section-toggle-chevron {
+    font-size: 1.1rem;
+    line-height: 0.8;
+}
+
+.section-collapsible.is-loading .section-toggle-coin {
+    animation: spinBitcoin 0.9s linear infinite;
+}
+
+.section-panel {
+    margin-top: 22px;
+}
+
+.section-panel[hidden] {
+    display: none !important;
+}
+
+.section-collapse-inner-title {
+    display: none !important;
+}
+
+@media (max-width: 520px) {
+    .section.section-collapsible {
+        padding: 10px;
+    }
+
+    .section-collapse-toggle {
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .section-toggle-coin {
+        width: 32px;
+        height: 32px;
+        flex-basis: 32px;
+        font-size: 18px;
+    }
+
+    .section-toggle-title {
+        font-size: 1rem;
+    }
+
+    .section-toggle-action {
+        gap: 4px;
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+}
