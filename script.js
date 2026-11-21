@@ -139,7 +139,144 @@ const powerLawFormulaOverlayPlugin = {
     }
 };
 
-Chart.register(powerLawFormulaOverlayPlugin);
+function getChartPointerPosition(chart, event) {
+    const rect = chart.canvas.getBoundingClientRect();
+    const scaleX = chart.canvas.width / rect.width;
+    const scaleY = chart.canvas.height / rect.height;
+    return {
+        x: (event.clientX - rect.left) * scaleX,
+        y: (event.clientY - rect.top) * scaleY
+    };
+}
+
+function clampChartPoint(chart, point) {
+    const area = chart.chartArea;
+    return {
+        x: Math.min(Math.max(point.x, area.left), area.right),
+        y: Math.min(Math.max(point.y, area.top), area.bottom)
+    };
+}
+
+function zoomChartToSelection(chart, selection) {
+    const xScale = chart.scales.x;
+    const yScale = chart.scales.y;
+    if (!xScale || !yScale) return;
+
+    const xStart = xScale.getValueForPixel(selection.start.x);
+    const xEnd = xScale.getValueForPixel(selection.end.x);
+    const yStart = yScale.getValueForPixel(selection.start.y);
+    const yEnd = yScale.getValueForPixel(selection.end.y);
+    if (![xStart, xEnd, yStart, yEnd].every(Number.isFinite)) return;
+
+    const lastIndex = Math.max((chart.data.labels?.length ?? 1) - 1, 1);
+    let minIndex = Math.max(0, Math.floor(Math.min(xStart, xEnd)));
+    let maxIndex = Math.min(lastIndex, Math.ceil(Math.max(xStart, xEnd)));
+    if (maxIndex <= minIndex) maxIndex = Math.min(lastIndex, minIndex + 1);
+
+    const minValue = Math.min(yStart, yEnd);
+    const maxValue = Math.max(yStart, yEnd);
+    if (!(maxValue > minValue)) return;
+    if (yScale.type === 'logarithmic' && minValue <= 0) return;
+
+    chart.options.scales.x.min = minIndex;
+    chart.options.scales.x.max = maxIndex;
+    chart.options.scales.y.min = minValue;
+    chart.options.scales.y.max = maxValue;
+    chart.update('none');
+}
+
+const chartDragZoomPlugin = {
+    id: 'chartDragZoom',
+    afterInit(chart) {
+        if (!['btcChart', 'realValueChart'].includes(chart.canvas?.id)) return;
+
+        const canvas = chart.canvas;
+        const state = { selection: null };
+        const onPointerDown = (event) => {
+            const area = chart.chartArea;
+            if (!area) return;
+            const point = getChartPointerPosition(chart, event);
+            if (point.x < area.left || point.x > area.right || point.y < area.top || point.y > area.bottom) return;
+
+            state.selection = { start: point, end: point };
+            canvas.classList.add('is-zooming');
+            event.preventDefault();
+            try {
+                canvas.setPointerCapture(event.pointerId);
+            } catch {
+                // Pointer capture is optional; normal pointer events still work.
+            }
+        };
+        const onPointerMove = (event) => {
+            if (!state.selection) return;
+            state.selection.end = clampChartPoint(chart, getChartPointerPosition(chart, event));
+            chart.draw();
+        };
+        const onPointerUp = (event) => {
+            if (!state.selection) return;
+            state.selection.end = clampChartPoint(chart, getChartPointerPosition(chart, event));
+            const selection = state.selection;
+            state.selection = null;
+            canvas.classList.remove('is-zooming');
+            chart.draw();
+
+            if (Math.abs(selection.end.x - selection.start.x) < 10 || Math.abs(selection.end.y - selection.start.y) < 10) return;
+            zoomChartToSelection(chart, selection);
+        };
+        const onDoubleClick = (event) => {
+            event.preventDefault();
+            state.selection = null;
+            canvas.classList.remove('is-zooming');
+            for (const scale of Object.values(chart.options.scales ?? {})) {
+                scale.min = undefined;
+                scale.max = undefined;
+            }
+            chart.update('none');
+        };
+
+        state.handlers = { onPointerDown, onPointerMove, onPointerUp, onDoubleClick };
+        chart.$chartDragZoom = state;
+        canvas.addEventListener('pointerdown', onPointerDown);
+        canvas.addEventListener('pointermove', onPointerMove);
+        canvas.addEventListener('pointerup', onPointerUp);
+        canvas.addEventListener('pointercancel', onPointerUp);
+        canvas.addEventListener('dblclick', onDoubleClick);
+    },
+    afterDraw(chart) {
+        const selection = chart.$chartDragZoom?.selection;
+        if (!selection) return;
+
+        const area = chart.chartArea;
+        const ctx = chart.ctx;
+        const left = Math.min(selection.start.x, selection.end.x);
+        const top = Math.min(selection.start.y, selection.end.y);
+        const width = Math.abs(selection.end.x - selection.start.x);
+        const height = Math.abs(selection.end.y - selection.start.y);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(247, 147, 26, 0.14)';
+        ctx.strokeStyle = '#f7931a';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.fillRect(left, top, width, height);
+        ctx.strokeRect(left, top, width, height);
+        ctx.restore();
+    },
+    beforeDestroy(chart) {
+        const state = chart.$chartDragZoom;
+        if (!state) return;
+        const { onPointerDown, onPointerMove, onPointerUp, onDoubleClick } = state.handlers;
+        chart.canvas.removeEventListener('pointerdown', onPointerDown);
+        chart.canvas.removeEventListener('pointermove', onPointerMove);
+        chart.canvas.removeEventListener('pointerup', onPointerUp);
+        chart.canvas.removeEventListener('pointercancel', onPointerUp);
+        chart.canvas.removeEventListener('dblclick', onDoubleClick);
+        chart.canvas.classList.remove('is-zooming');
+        delete chart.$chartDragZoom;
+    }
+};
+
+Chart.register(powerLawFormulaOverlayPlugin, chartDragZoomPlugin);
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
