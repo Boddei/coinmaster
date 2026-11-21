@@ -2321,17 +2321,17 @@ function escapeHtml(value = '') {
 async function loadTreasuryCompanies() {
     try {
         const [quoteResult, bitcoinQuantResult, treasuryResult, cebeResult] = await Promise.allSettled([
-            fetch(getYahooQuoteUrl([
+            fetchYahooQuotes([
                 ...CONFIG.treasuryCompanies.map((company) => company.quoteSymbol),
                 'EURUSD=X',
                 'JPY=X'
-            ])),
+            ]),
             fetchBitcoinQuantTreasuryData(),
             fetch(`${CONFIG.coingecko.baseUrl}/companies/public_treasury/bitcoin`),
             fetch(CONFIG.cebeTracker.companiesUrl)
         ]);
 
-        const quoteResponse = quoteResult.status === 'fulfilled' ? quoteResult.value : null;
+        const quotePayload = quoteResult.status === 'fulfilled' ? quoteResult.value : [];
         const bitcoinQuantPayload = bitcoinQuantResult.status === 'fulfilled' ? bitcoinQuantResult.value : null;
         const treasuryResponse = treasuryResult.status === 'fulfilled' ? treasuryResult.value : null;
         const cebeResponse = cebeResult.status === 'fulfilled' ? cebeResult.value : null;
@@ -2341,11 +2341,10 @@ async function loadTreasuryCompanies() {
         if (treasuryResult.status === 'rejected') console.warn('CoinGecko Treasury API nicht erreichbar:', treasuryResult.reason);
         if (cebeResult.status === 'rejected') console.warn('CEBE Tracker Feed nicht erreichbar:', cebeResult.reason);
 
-        const quotePayload = quoteResponse?.ok ? await quoteResponse.json() : null;
         const treasuryPayload = treasuryResponse?.ok ? await treasuryResponse.json() : null;
         const cebePayload = cebeResponse?.ok ? await cebeResponse.json() : null;
 
-        const quoteMap = mapQuotesBySymbol(quotePayload?.quoteResponse?.result || []);
+        const quoteMap = mapQuotesBySymbol(quotePayload);
         const bitcoinQuantCompanies = parseBitcoinQuantCompanies(bitcoinQuantPayload);
         const coingeckoCompanies = Array.isArray(treasuryPayload?.companies) ? treasuryPayload.companies : [];
         const holdingsMap = mapHoldingsByName([...bitcoinQuantCompanies, ...coingeckoCompanies]);
@@ -2430,9 +2429,39 @@ function toArray(value) {
     return Array.isArray(value) ? value : [];
 }
 
-function getYahooQuoteUrl(symbols = []) {
-    const encodedSymbols = symbols.join(',');
-    return `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(encodedSymbols)}`;
+async function fetchYahooQuotes(symbols = []) {
+    const quotes = await Promise.all(symbols.map(async (symbol) => {
+        try {
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`;
+            const response = await fetch(`https://proxy.cors.dev/${chartUrl}`, { cache: 'no-store' });
+            if (!response.ok) throw new Error(`HTTP ${response.status} für Yahoo Chart ${symbol}`);
+
+            const payload = await response.json();
+            const chart = payload?.chart?.result?.[0];
+            if (!chart?.meta) throw new Error(`Keine Kursdaten für ${symbol}`);
+
+            const meta = chart.meta;
+            const closeValues = chart.indicators?.quote?.[0]?.close || [];
+            const lastClose = [...closeValues].reverse().find((value) => toFiniteNumber(value) !== null);
+            const price = toFiniteNumber(meta.regularMarketPrice) ?? toFiniteNumber(lastClose);
+            const previousClose = toFiniteNumber(meta.chartPreviousClose) ?? toFiniteNumber(meta.previousClose);
+            const changePercent = price !== null && previousClose !== null && previousClose > 0
+                ? ((price / previousClose) - 1) * 100
+                : null;
+
+            return {
+                symbol: meta.symbol || symbol,
+                regularMarketPrice: price,
+                regularMarketChangePercent: changePercent,
+                currency: meta.currency || 'USD'
+            };
+        } catch (error) {
+            console.warn(`Yahoo-Kurs für ${symbol} nicht verfügbar:`, error);
+            return null;
+        }
+    }));
+
+    return quotes.filter(Boolean);
 }
 
 function mapQuotesBySymbol(quotes = []) {
