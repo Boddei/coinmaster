@@ -203,7 +203,12 @@ function updatePeriodChangeSummary(chart) {
         minimumFractionDigits: 0,
         maximumFractionDigits: currentRealValueCurrency === 'gold' ? 4 : 2
     });
-    valueElement.textContent = `${sign}${amount} ${unit}`;
+    const percent = first === 0 ? null : (change / first) * 100;
+    const percentSign = percent > 0 ? '+' : percent < 0 ? '−' : '';
+    const percentLabel = Number.isFinite(percent)
+        ? ` (${percentSign}${Math.abs(percent).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)`
+        : '';
+    valueElement.textContent = `${sign}${amount} ${unit}${percentLabel}`;
 }
 
 function zoomChartToSelection(chart, selection) {
