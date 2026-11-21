@@ -2537,7 +2537,10 @@ function renderTreasuryCompany(company, quote, btcHoldings, cebeCompany = null) 
         ? marketCap / bitcoinNavUsd
         : null;
     const mnav = computedMnav ?? toFiniteNumber(company.fallbackNmav);
-    nmavEl.textContent = mnav !== null ? `${mnav.toFixed(2)}x` : 'Nicht verfügbar';
+    const pricePremium = toFiniteNumber(cebeCompany?.cebe_mnav_live);
+    nmavEl.textContent = pricePremium !== null
+        ? `${pricePremium.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} x`
+        : 'Nicht verfügbar';
 
     const btcPerShare = Number.isFinite(btcHoldings) && sharesOutstanding !== null && sharesOutstanding > 0
         ? btcHoldings / sharesOutstanding
