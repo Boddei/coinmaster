@@ -233,7 +233,8 @@ function setupCollapsibleSections() {
             action.querySelector('.section-toggle-action-label').textContent = 'Lädt …';
             await loadDashboardSection(stage);
             section.classList.remove('is-loading');
-            action.querySelector('.section-toggle-action-label').textContent = 'Schließen';
+            action.querySelector('.section-toggle-action-label').textContent = panel.hidden ? 'Öffnen' : 'Schließen';
+            action.querySelector('.section-toggle-chevron').textContent = panel.hidden ? '⌄' : '⌃';
         });
     });
 }
