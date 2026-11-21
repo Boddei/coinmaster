@@ -157,6 +157,55 @@ function clampChartPoint(chart, point) {
     };
 }
 
+function updatePeriodChangeSummary(chart) {
+    const points = chart?.$periodChangePoints;
+    const xScale = chart?.scales?.x;
+    if (!Array.isArray(points) || points.length === 0 || !xScale) return;
+
+    const scaleMin = Number.isFinite(Number(xScale.min)) ? Number(xScale.min) : 0;
+    const scaleMax = Number.isFinite(Number(xScale.max)) ? Number(xScale.max) : points.length - 1;
+    const startIndex = Math.max(0, Math.ceil(scaleMin));
+    const endIndex = Math.min(points.length - 1, Math.floor(scaleMax));
+    const visibleValues = points
+        .slice(startIndex, endIndex + 1)
+        .map((point) => point.value)
+        .filter(Number.isFinite);
+
+    const valueElement = document.getElementById(
+        chart.canvas.id === 'btcChart' ? 'btcChartPeriodChangeValue' : 'realValueChartPeriodChangeValue'
+    );
+    if (!valueElement) return;
+    if (visibleValues.length < 2) {
+        valueElement.textContent = '—';
+        valueElement.classList.remove('is-positive', 'is-negative');
+        return;
+    }
+
+    const first = visibleValues[0];
+    const last = visibleValues[visibleValues.length - 1];
+    const change = last - first;
+    const sign = change > 0 ? '+' : change < 0 ? '−' : '';
+    valueElement.classList.toggle('is-positive', change > 0);
+    valueElement.classList.toggle('is-negative', change < 0);
+
+    if (chart.canvas.id === 'btcChart') {
+        const percent = first === 0 ? null : (change / first) * 100;
+        const percentSign = percent > 0 ? '+' : percent < 0 ? '−' : '';
+        const percentLabel = Number.isFinite(percent)
+            ? ` (${percentSign}${Math.abs(percent).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%)`
+            : '';
+        valueElement.textContent = `${sign}${formatCurrency(Math.abs(change), currentChartCurrency.toUpperCase())}${percentLabel}`;
+        return;
+    }
+
+    const unit = currentRealValueCurrency === 'gold' ? 'oz Gold' : 'Indexpunkte';
+    const amount = Math.abs(change).toLocaleString('de-DE', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: currentRealValueCurrency === 'gold' ? 4 : 2
+    });
+    valueElement.textContent = `${sign}${amount} ${unit}`;
+}
+
 function zoomChartToSelection(chart, selection) {
     const xScale = chart.scales.x;
     const yScale = chart.scales.y;
@@ -183,6 +232,7 @@ function zoomChartToSelection(chart, selection) {
     chart.options.scales.y.min = minValue;
     chart.options.scales.y.max = maxValue;
     chart.update('none');
+    updatePeriodChangeSummary(chart);
 }
 
 const chartDragZoomPlugin = {
@@ -232,6 +282,7 @@ const chartDragZoomPlugin = {
                 scale.max = undefined;
             }
             chart.update('none');
+            updatePeriodChangeSummary(chart);
         };
 
         state.handlers = { onPointerDown, onPointerMove, onPointerUp, onDoubleClick };
@@ -1037,6 +1088,8 @@ function updateChart(priceData) {
             }
         }
     });
+    btcChart.$periodChangePoints = priceData.map((point) => ({ value: point.price }));
+    updatePeriodChangeSummary(btcChart);
 }
 
 function buildPowerLawFormulas() {
@@ -1862,6 +1915,10 @@ function updateRealValueChart() {
             }
         }
     });
+    realValueChart.$periodChangePoints = rows.map((row) => ({
+        value: isGold ? row.btcInGoldOz : row.btcInMsciWorld
+    }));
+    updatePeriodChangeSummary(realValueChart);
 }
 
 // ============================================================================
