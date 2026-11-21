@@ -363,7 +363,7 @@
         <section class="section treasury-section" data-stage="treasury">
             <div class="treasury-header">
                 <h2>Treasuries</h2>
-                <p class="treasury-updated">Stand: <span id="treasuryUpdated">-</span></p>
+                <p class="treasury-updated">Stand: <span id="treasuryUpdated">-</span> · Daten: <a href="https://cebetracker.io/tracker/" target="_blank" rel="noopener noreferrer">CEBE Tracker</a></p>
             </div>
             <div class="indicators-grid treasury-grid">
                 <div class="indicator-card">
@@ -414,6 +414,29 @@
 
                 <div class="indicator-card">
                     <div class="indicator-header">
+                        <h3>Strive</h3>
+                    </div>
+                    <div class="indicator-value" id="treasuryPriceStrive">Lädt...</div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">BTC Menge:</span>
+                        <span class="detail-value" id="treasuryBtcStrive">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Aktuelle nMAV:</span>
+                        <span class="detail-value" id="treasuryNmavStrive">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">Amplification:</span>
+                        <span class="detail-value" id="treasuryAmplificationStrive">-</span>
+                    </div>
+                    <div class="indicator-detail">
+                        <span class="detail-label">BTC Yield (1J):</span>
+                        <span class="detail-value" id="treasuryYieldStrive">-</span>
+                    </div>
+                </div>
+
+                <div class="indicator-card">
+                    <div class="indicator-header">
                         <h3>Capital B</h3>
                     </div>
                     <div class="indicator-value" id="treasuryPriceCapitalB">Lädt...</div>
@@ -444,6 +467,6 @@
         </footer>
     </div>
 
-    <script src="script.js?v=20261121-period-change-relative"></script>
+    <script src="script.js?v=20261121-cebe-treasuries"></script>
 </body>
 </html>
