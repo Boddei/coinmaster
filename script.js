@@ -87,7 +87,8 @@ const maVisibility = {
     sma50d: false,
     sma200d: false,
     sma200w: false,
-    powerlaw: false
+    powerlaw: false,
+    realizedPrice: false
 };
 
 const POWER_LAW_SERIES = [
@@ -472,6 +473,7 @@ function enrichMarketPricesWithMovingAverages(priceData, rows) {
         const sma50d = row?.[`sma50d${currencySuffix}`];
         const sma200d = row?.[`sma200d${currencySuffix}`];
         const sma200w = row?.[`sma200w${currencySuffix}`];
+        const realizedPrice = row?.[`realizedPrice${currencySuffix}`];
         const pricePowerLaws = row?.date === date
             ? null
             : {
@@ -486,6 +488,7 @@ function enrichMarketPricesWithMovingAverages(priceData, rows) {
             sma50d: sma50d ?? null,
             sma200d: sma200d ?? null,
             sma200w: sma200w ?? null,
+            realizedPrice: realizedPrice ?? null,
             powerLawQ01: pricePowerLaws?.powerLawQ01 ?? row?.[`powerLawQ01${currencySuffix}`] ?? null,
             powerLawQ50: pricePowerLaws?.powerLawQ50 ?? row?.[`powerLawQ50${currencySuffix}`] ?? null,
             powerLawQ99: pricePowerLaws?.powerLawQ99 ?? row?.[`powerLawQ99${currencySuffix}`] ?? null
@@ -594,6 +597,7 @@ function updateChart(priceData) {
     const sma50d = priceData.map(point => point.sma50d);
     const sma200d = priceData.map(point => point.sma200d);
     const sma200w = priceData.map(point => point.sma200w);
+    const realizedPrice = priceData.map(point => point.realizedPrice);
     const powerLawQ01 = priceData.map(point => point.powerLawQ01);
     const powerLawQ50 = priceData.map(point => point.powerLawQ50);
     const powerLawQ99 = priceData.map(point => point.powerLawQ99);
@@ -701,6 +705,19 @@ function updateChart(priceData) {
                     pointRadius: 0,
                     spanGaps: true,
                     hidden: !maVisibility.powerlaw
+                },
+                {
+                    label: `Realized Price (${chartCurrency})`,
+                    data: realizedPrice,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [5, 4],
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    spanGaps: true,
+                    hidden: !maVisibility.realizedPrice
                 }
             ]
         },
@@ -895,7 +912,8 @@ function setupChartControls() {
                 sma50d: 1,
                 sma200d: 2,
                 sma200w: 3,
-                powerlaw: [4, 5, 6]
+                powerlaw: [4, 5, 6],
+                realizedPrice: 7
             };
 
             const datasetIndex = datasetIndexMap[maKey];
@@ -984,6 +1002,8 @@ async function fetchLocalCsvPrices() {
                 powerLawQ01Usd: toNullableNumber(readColumn(columns, 'powerlaw_q01_usd')),
                 powerLawQ50Usd: toNullableNumber(readColumn(columns, 'powerlaw_q50_usd')),
                 powerLawQ99Usd: toNullableNumber(readColumn(columns, 'powerlaw_q99_usd')),
+                realizedPriceEur: toNullableNumber(readColumn(columns, 'realized_price_eur')),
+                realizedPriceUsd: toNullableNumber(readColumn(columns, 'realized_price_usd')),
                 powerLawFactorUsd: toNullableNumber(readColumn(columns, 'powerlaw_factor_usd'))
             });
         }
