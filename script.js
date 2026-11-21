@@ -341,7 +341,7 @@ const halvingDateMarkersPlugin = {
     }
 };
 
-Chart.register(powerLawFormulaOverlayPlugin, chartDragZoomPlugin);
+Chart.register(powerLawFormulaOverlayPlugin, chartDragZoomPlugin, halvingDateMarkersPlugin);
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
