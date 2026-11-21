@@ -148,80 +148,131 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initApp() {
     console.log('Bitcoin Dashboard initialisiert...');
-    prepareStagedSections();
-    localPriceRowsPromise = ensureLocalPriceRows();
+    setupCollapsibleSections();
 
-    // Setup controls immediately so UI can react while data streams in
+    // Wire controls without fetching data; each section loads on first open.
     setupChartControls();
     setupRealValueControls();
     setupKpiCurrencyControls();
-    renderAssetClassTreemap();
 
-    // Smart-Money bewusst nicht blockierend laden
-    loadSmartMoneyDigest().finally(() => {
-        revealSection('smart-money');
-    });
-
-    loadTreasuryCompanies().finally(() => {
-        revealSection('treasury');
-    });
-
-    // Stage 1: top KPIs first
-    await loadBitcoinData();
-    revealSection('price');
-    revealSection('assets');
-
-    // Stage 2 + 3: chart first, then calculations/indicators
-    requestAnimationFrame(async () => {
-        await localPriceRowsPromise;
-        await Promise.all([
-            loadChartData(currentChartDays),
-            loadRealValueComparison()
-        ]);
-        revealSection('chart');
-        revealSection('real-value');
-
-        setTimeout(async () => {
-            await loadFundamentalIndicators();
-            revealSection('indicators');
-        }, 0);
-    });
-    
-    // Setup auto-refresh
+    // Only refresh data while its section is open.
     setInterval(async () => {
-        await loadBitcoinData();
-        await loadFundamentalIndicators();
-        await loadTreasuryCompanies();
-        if (['1', '7', '30'].includes(String(currentChartDays))) await loadChartData(currentChartDays);
-        if (['1', '7', '30'].includes(currentRealValueDays)) await loadRealValueComparison();
+        if (isSectionExpanded('price')) await loadBitcoinData();
+        if (isSectionExpanded('indicators')) await loadFundamentalIndicators();
+        if (isSectionExpanded('treasury')) await loadTreasuryCompanies();
+        if (isSectionExpanded('chart') && ['1', '7', '30'].includes(String(currentChartDays))) {
+            await ensureLocalPriceRows();
+            await loadChartData(currentChartDays);
+        }
+        if (isSectionExpanded('real-value') && ['1', '7', '30'].includes(currentRealValueDays)) {
+            await loadRealValueComparison();
+        }
     }, CONFIG.refreshInterval);
 
-    // Smart-Money-Update reicht täglich, wir pollen nur sehr selten neu
-    setInterval(loadSmartMoneyDigest, 60 * 60 * 1000);
-    
-    // Update last update time
+    // Smart-Money-Update reicht täglich; nur geöffnete Bereiche werden neu geladen.
+    setInterval(() => {
+        if (isSectionExpanded('smart-money')) loadSmartMoneyDigest();
+    }, 60 * 60 * 1000);
+
     updateLastUpdateTime();
     setInterval(updateLastUpdateTime, 30000);
 }
 
-function prepareStagedSections() {
-    document.querySelectorAll('[data-stage]').forEach((section) => {
-        section.classList.add('section-staged', 'is-loading');
-        if (!section.querySelector('.section-loader')) {
-            const loader = document.createElement('div');
-            loader.className = 'section-loader';
-            loader.innerHTML = '<span class="section-loader-icon" aria-hidden="true">₿</span>';
-            loader.setAttribute('aria-label', 'Ladeindikator');
-            section.appendChild(loader);
+function setupCollapsibleSections() {
+    document.querySelectorAll('section[data-stage]').forEach((section) => {
+        const stage = section.dataset.stage;
+        const panelId = `section-panel-${stage}`;
+        const existingHeading = section.querySelector('h2');
+        const title = existingHeading?.textContent.trim() || stage;
+        existingHeading?.classList.add('section-collapse-inner-title');
+
+        const panel = document.createElement('div');
+        panel.className = 'section-panel';
+        panel.id = panelId;
+        panel.hidden = true;
+
+        while (section.firstChild) {
+            panel.appendChild(section.firstChild);
         }
+
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'section-collapse-toggle';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-controls', panelId);
+
+        const coin = document.createElement('span');
+        coin.className = 'section-toggle-coin';
+        coin.setAttribute('aria-hidden', 'true');
+        coin.textContent = '₿';
+
+        const titleElement = document.createElement('span');
+        titleElement.className = 'section-toggle-title';
+        titleElement.id = `section-toggle-title-${stage}`;
+        titleElement.textContent = title;
+
+        const action = document.createElement('span');
+        action.className = 'section-toggle-action';
+        action.innerHTML = '<span class="section-toggle-action-label">Öffnen</span><span class="section-toggle-chevron" aria-hidden="true">⌄</span>';
+
+        toggle.append(coin, titleElement, action);
+        section.replaceChildren(toggle, panel);
+        section.classList.add('section-collapsible', 'is-collapsed');
+
+        toggle.addEventListener('click', async () => {
+            const willExpand = panel.hidden;
+            panel.hidden = !willExpand;
+            section.classList.toggle('is-expanded', willExpand);
+            section.classList.toggle('is-collapsed', !willExpand);
+            toggle.setAttribute('aria-expanded', String(willExpand));
+            action.querySelector('.section-toggle-action-label').textContent = willExpand ? 'Schließen' : 'Öffnen';
+            action.querySelector('.section-toggle-chevron').textContent = willExpand ? '⌃' : '⌄';
+            if (!willExpand) return;
+
+            section.classList.add('is-loading');
+            action.querySelector('.section-toggle-action-label').textContent = 'Lädt …';
+            await loadDashboardSection(stage);
+            section.classList.remove('is-loading');
+            action.querySelector('.section-toggle-action-label').textContent = 'Schließen';
+        });
     });
 }
 
-function revealSection(stageName) {
-    const section = document.querySelector(`[data-stage="${stageName}"]`);
-    if (!section) return;
-    section.classList.remove('is-loading');
-    section.classList.add('is-visible');
+function isSectionExpanded(stage) {
+    return document.querySelector(`[data-stage="${stage}"]`)?.classList.contains('is-expanded') ?? false;
+}
+
+async function loadDashboardSection(stage) {
+    try {
+        switch (stage) {
+            case 'price':
+                await loadBitcoinData();
+                break;
+            case 'chart':
+                await ensureLocalPriceRows();
+                await loadChartData(currentChartDays);
+                break;
+            case 'real-value':
+                await loadRealValueComparison();
+                break;
+            case 'indicators':
+                await loadFundamentalIndicators();
+                break;
+            case 'smart-money':
+                await loadSmartMoneyDigest();
+                break;
+            case 'assets':
+                renderAssetClassTreemap();
+                break;
+            case 'treasury':
+                await loadTreasuryCompanies();
+                break;
+            default:
+                break;
+        }
+    } catch (error) {
+        console.error(`Fehler beim Laden des Bereichs "${stage}":`, error);
+    }
 }
 
 // ============================================================================
@@ -941,6 +992,8 @@ function setupKpiCurrencyControls() {
         if (indicatorsTitle) {
             indicatorsTitle.textContent = `Kurs-Indikatoren (${currentKpiCurrency.toUpperCase()})`;
         }
+        const sectionTitle = document.getElementById('section-toggle-title-indicators');
+        if (sectionTitle) sectionTitle.textContent = `Kurs-Indikatoren (${currentKpiCurrency.toUpperCase()})`;
     };
 
     updateTitle();
